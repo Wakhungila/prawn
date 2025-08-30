@@ -1,0 +1,14 @@
+{
+    "target": "https://dealfront.com",
+    "port": 443,
+    "certificate_info": {},
+    "supported_protocols": {},
+    "supported_ciphers": {},
+    "vulnerabilities": [
+        {
+            "name": "No Modern TLS Support",
+            "severity": "High",
+            "description": "Server does not support TLS 1.2 or TLS 1.3, which are the recommended secure protocols"
+        }
+    ]
+}

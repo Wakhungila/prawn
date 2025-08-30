@@ -1,0 +1,51 @@
+{
+    "target": "https://dealfront.com",
+    "technologies": {
+        "React": {
+            "name": "React",
+            "version": "037.05.077",
+            "confidence": "Medium",
+            "source": "Custom Fingerprinting"
+        },
+        "Google Tag Manager": {
+            "name": "Google Tag Manager",
+            "version": "037.05.077",
+            "confidence": "Medium",
+            "source": "Custom Fingerprinting"
+        },
+        "Tailwind CSS": {
+            "name": "Tailwind CSS",
+            "version": "037.05.077",
+            "confidence": "Medium",
+            "source": "Custom Fingerprinting"
+        },
+        "Foundation": {
+            "name": "Foundation",
+            "version": "037.05.077",
+            "confidence": "Medium",
+            "source": "Custom Fingerprinting"
+        }
+    },
+    "server_info": {
+        "server": "AmazonS3"
+    },
+    "cms_info": {},
+    "javascript_libraries": [],
+    "headers": {
+        "Content-Type": "text/html",
+        "Connection": "keep-alive",
+        "Last-Modified": "Sat, 30 Aug 2025 03:26:56 GMT",
+        "Server": "AmazonS3",
+        "Content-Encoding": "gzip",
+        "Date": "Sat, 30 Aug 2025 11:38:59 GMT",
+        "Cache-Control": "max-age=0,no-cache,must-revalidate",
+        "ETag": "W/\"e29f7d2d12d0037081d80625ca425c62\"",
+        "Vary": "Accept-Encoding",
+        "X-Cache": "RefreshHit from cloudfront",
+        "Via": "1.1 9128b2edf02c087c4c71228b24f64eb8.cloudfront.net (CloudFront)",
+        "X-Amz-Cf-Pop": "NBO50-P1",
+        "X-Amz-Cf-Id": "F5oMh3GJ8du87rpJALqH9enNn2otx1gygjnwneOZKBALyUC3z4_NuQ==",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": "frame-ancestors 'none'"
+    }
+}

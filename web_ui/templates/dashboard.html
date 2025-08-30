@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | PIN0CCHI0{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.3s;
+    }
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    .module-card {
+        height: 100%;
+        transition: all 0.3s;
+    }
+    .module-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .module-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+    .recent-scan-item {
+        transition: background-color 0.3s;
+    }
+    .recent-scan-item:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+    .vulnerability-chart-container {
+        height: 300px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3">PIN0CCHI0 Dashboard</h1>
+            <p class="text-muted">Security Testing Framework</p>
+        </div>
+        <div class="col-auto">
+            <a href="{{ url_for('index') }}#scan-form" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>New Scan
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-4 mb-md-0">
+            <div class="card stat-card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Total Scans</h6>
+                            <h2 class="mb-0">{{ stats.total_scans }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-search fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <div class="card stat-card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Vulnerabilities</h6>
+                            <h2 class="mb-0">{{ stats.total_vulnerabilities }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-bug fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-4 mb-md-0">
+            <div class="card stat-card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">High Severity</h6>
+                            <h2 class="mb-0">{{ stats.high_severity }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-exclamation-triangle fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title">Targets Scanned</h6>
+                            <h2 class="mb-0">{{ stats.unique_targets }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-globe fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row">
+        <!-- Left Column -->
+        <div class="col-lg-8">
+            <!-- Recent Scans -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Scans</h5>
+                        <a href="{{ url_for('scans') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Target</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Vulnerabilities</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for scan in recent_scans %}
+                                <tr class="recent-scan-item">
+                                    <td>{{ scan.target }}</td>
+                                    <td>{{ scan.scan_type }}</td>
+                                    <td>
+                                        {% if scan.status == 'running' %}
+                                            <span class="badge bg-info">Running</span>
+                                        {% elif scan.status == 'completed' %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif scan.status == 'error' %}
+                                            <span class="badge bg-danger">Error</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ scan.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ scan.vulnerability_count }}</td>
+                                    <td>{{ scan.start_time }}</td>
+                                    <td>
+                                        <a href="{{ url_for('scan_detail', scan_id=scan.id) }}" class="btn btn-sm btn-outline-secondary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">
+                                        <p class="text-muted mb-0">No scans found</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vulnerability Distribution Chart -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Vulnerability Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="vulnerability-chart-container">
+                        <canvas id="vulnerabilityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="col-lg-4">
+            <!-- Module Cards -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Available Modules</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="card module-card">
+                                <div class="card-body text-center">
+                                    <div class="module-icon text-primary">
+                                        <i class="fas fa-search"></i>
+                                    </div>
+                                    <h5 class="card-title">Recon</h5>
+                                    <p class="card-text small">Reconnaissance tools</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card module-card">
+                                <div class="card-body text-center">
+                                    <div class="module-icon text-danger">
+                                        <i class="fas fa-bug"></i>
+                                    </div>
+                                    <h5 class="card-title">Vuln Testing</h5>
+                                    <p class="card-text small">Vulnerability scanners</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card module-card">
+                                <div class="card-body text-center">
+                                    <div class="module-icon text-warning">
+                                        <i class="fas fa-hammer"></i>
+                                    </div>
+                                    <h5 class="card-title">Exploitation</h5>
+                                    <p class="card-text small">Exploit frameworks</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="card module-card">
+                                <div class="card-body text-center">
+                                    <div class="module-icon text-success">
+                                        <i class="fas fa-robot"></i>
+                                    </div>
+                                    <h5 class="card-title">Autonomous</h5>
+                                    <p class="card-text small">AI-driven scanning</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Vulnerabilities -->
+            <div class="card">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Vulnerabilities</h5>
+                        <a href="{{ url_for('vulnerabilities') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        {% for vuln in recent_vulnerabilities %}
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ vuln.type }}</h6>
+                                    <p class="mb-0 small text-truncate" style="max-width: 200px;">{{ vuln.url }}</p>
+                                </div>
+                                <span class="badge {% if vuln.severity == 'High' %}bg-danger{% elif vuln.severity == 'Medium' %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ vuln.severity }}</span>
+                            </div>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item text-center py-4">
+                            <p class="text-muted mb-0">No vulnerabilities found</p>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Vulnerability Distribution Chart
+        const ctx = document.getElementById('vulnerabilityChart').getContext('2d');
+        const vulnerabilityChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['XSS', 'SQL Injection', 'CSRF', 'SSRF', 'IDOR', 'XXE', 'Path Traversal', 'Other'],
+                datasets: [{
+                    label: 'Vulnerabilities by Type',
+                    data: {{ vuln_distribution|safe }},
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)',
+                        'rgba(255, 159, 64, 0.7)',
+                        'rgba(199, 199, 199, 0.7)',
+                        'rgba(83, 102, 255, 0.7)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)',
+                        'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)',
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)',
+                        'rgba(255, 159, 64, 1)',
+                        'rgba(199, 199, 199, 1)',
+                        'rgba(83, 102, 255, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+
+        // Module card click handlers
+        document.querySelectorAll('.module-card').forEach(card => {
+            card.addEventListener('click', function() {
+                window.location.href = "{{ url_for('index') }}#scan-form";
+            });
+        });
+    });
+</script>
+{% endblock %}

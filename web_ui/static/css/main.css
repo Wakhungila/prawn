@@ -1,0 +1,324 @@
+/* PIN0CCHI0 Web UI Main CSS */
+
+:root {
+  --primary-color: #2c3e50;
+  --secondary-color: #e74c3c;
+  --accent-color: #3498db;
+  --success-color: #2ecc71;
+  --warning-color: #f39c12;
+  --danger-color: #e74c3c;
+  --info-color: #3498db;
+  --light-color: #ecf0f1;
+  --dark-color: #2c3e50;
+  --text-color: #333;
+  --text-muted: #7f8c8d;
+  --border-color: #ddd;
+  --card-bg: #fff;
+  --body-bg: #f5f5f5;
+}
+
+body {
+  font-family: 'Roboto', sans-serif;
+  background-color: var(--body-bg);
+  color: var(--text-color);
+  margin: 0;
+  padding: 0;
+}
+
+/* Navbar Styling */
+.navbar {
+  background-color: var(--primary-color);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-brand {
+  font-weight: 700;
+  color: white;
+  font-size: 1.5rem;
+}
+
+.navbar-brand span {
+  color: var(--secondary-color);
+}
+
+.nav-link {
+  color: rgba(255, 255, 255, 0.8) !important;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.nav-link:hover {
+  color: white !important;
+}
+
+.nav-link.active {
+  color: white !important;
+  border-bottom: 2px solid var(--secondary-color);
+}
+
+/* Card Styling */
+.card {
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  border: none;
+  background-color: var(--card-bg);
+}
+
+.card-header {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  padding: 15px 20px;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+/* Button Styling */
+.btn-primary {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.btn-primary:hover {
+  background-color: #2980b9;
+  border-color: #2980b9;
+}
+
+.btn-secondary {
+  background-color: var(--secondary-color);
+  border-color: var(--secondary-color);
+}
+
+.btn-secondary:hover {
+  background-color: #c0392b;
+  border-color: #c0392b;
+}
+
+/* Form Styling */
+.form-control:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 0.2rem rgba(52, 152, 219, 0.25);
+}
+
+/* Dashboard Widgets */
+.stat-card {
+  border-left: 4px solid var(--accent-color);
+  transition: transform 0.3s;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+}
+
+.stat-card.vulnerabilities {
+  border-left-color: var(--danger-color);
+}
+
+.stat-card.scans {
+  border-left-color: var(--info-color);
+}
+
+.stat-card.targets {
+  border-left-color: var(--success-color);
+}
+
+.stat-card .stat-icon {
+  font-size: 2.5rem;
+  opacity: 0.8;
+}
+
+.stat-card .stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-card .stat-label {
+  font-size: 1rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Vulnerability Table */
+.vuln-table th {
+  border-top: none;
+  border-bottom: 2px solid var(--border-color);
+  font-weight: 600;
+}
+
+.vuln-table td {
+  vertical-align: middle;
+}
+
+.severity-high {
+  color: var(--danger-color);
+  font-weight: 600;
+}
+
+.severity-medium {
+  color: var(--warning-color);
+  font-weight: 600;
+}
+
+.severity-low {
+  color: var(--info-color);
+  font-weight: 600;
+}
+
+/* Scan Status Badges */
+.badge-running {
+  background-color: var(--info-color);
+  color: white;
+}
+
+.badge-completed {
+  background-color: var(--success-color);
+  color: white;
+}
+
+.badge-failed {
+  background-color: var(--danger-color);
+  color: white;
+}
+
+.badge-queued {
+  background-color: var(--warning-color);
+  color: white;
+}
+
+/* Progress Bars */
+.progress {
+  height: 10px;
+  border-radius: 5px;
+  margin-top: 5px;
+  margin-bottom: 15px;
+}
+
+.progress-bar {
+  background-color: var(--accent-color);
+}
+
+/* Scan Log */
+.scan-log {
+  background-color: #2c3e50;
+  color: #ecf0f1;
+  padding: 15px;
+  border-radius: 5px;
+  font-family: 'Courier New', monospace;
+  height: 300px;
+  overflow-y: auto;
+}
+
+.scan-log .log-entry {
+  margin-bottom: 5px;
+  line-height: 1.4;
+}
+
+.scan-log .log-time {
+  color: #95a5a6;
+  margin-right: 10px;
+}
+
+.scan-log .log-level-info {
+  color: #3498db;
+}
+
+.scan-log .log-level-warning {
+  color: #f39c12;
+}
+
+.scan-log .log-level-error {
+  color: #e74c3c;
+}
+
+.scan-log .log-level-success {
+  color: #2ecc71;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .stat-card .stat-value {
+    font-size: 1.5rem;
+  }
+  
+  .stat-card .stat-icon {
+    font-size: 2rem;
+  }
+}
+
+/* Animation for loading */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.loading {
+  animation: pulse 1.5s infinite;
+}
+
+/* Target List */
+.target-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.target-item {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.target-item:last-child {
+  border-bottom: none;
+}
+
+.target-item:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Module Selection */
+.module-selection {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.module-card {
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.module-card:hover {
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+.module-card.selected {
+  background-color: rgba(52, 152, 219, 0.1);
+  border-color: var(--accent-color);
+}
+
+.module-card .module-name {
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.module-card .module-description {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}

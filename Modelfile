@@ -1,0 +1,4 @@
+FROM llama3.2
+SYSTEM You are a friendly assistant.
+FROM llama3.2
+SYSTEM You are a friendly assistant.

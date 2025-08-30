@@ -1,0 +1,87 @@
+{
+    "autonomous": {
+        "enabled": true,
+        "targets": [],
+        "discover_targets": true,
+        "discovery_methods": ["dns", "whois", "shodan"],
+        "max_concurrent_scans": 3,
+        "scan_interval": 3600,
+        "output_dir": "results/autonomous",
+        "modules": {
+            "web_scanner": true,
+            "xss_scanner": true,
+            "sql_injection": true,
+            "csrf_scanner": true,
+            "ssrf_scanner": true,
+            "idor_scanner": true,
+            "lfi_scanner": true,
+            "xxe_scanner": true,
+            "access_control_scanner": true,
+            "logic_flaw_scanner": true,
+            "path_traversal": true,
+            "command_injection": true,
+            "open_redirect_scanner": true,
+            "ssti_scanner": true,
+            "deserialization_scanner": true,
+            "host_header_scanner": true,
+            "http_security_scanner": true,
+            "rfi_scanner": true
+        },
+        "shodan": {
+            "api_key": "",
+            "query_limit": 100
+        },
+        "reporting": {
+            "email": {
+                "enabled": false,
+                "smtp_server": "",
+                "smtp_port": 587,
+                "username": "",
+                "password": "",
+                "from_address": "",
+                "to_addresses": []
+            },
+            "webhook": {
+                "enabled": false,
+                "url": "",
+                "headers": {}
+            }
+        },
+        "throttling": {
+            "requests_per_second": 10,
+            "max_requests_per_host": 1000,
+            "respect_robots_txt": true
+        },
+        "authentication": {
+            "enabled": false,
+            "method": "basic",
+            "username": "",
+            "password": "",
+            "token": "",
+            "cookie": ""
+        },
+        "proxy": {
+            "enabled": false,
+            "http": "",
+            "https": ""
+        },
+        "user_agents": [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36"
+        ],
+        "exclude_urls": [
+            "*logout*",
+            "*signout*",
+            "*delete*"
+        ],
+        "exclude_patterns": [
+            "\\.jpg$",
+            "\\.png$",
+            "\\.gif$",
+            "\\.css$",
+            "\\.js$"
+        ],
+        "exclude_modules": []
+    }
+}

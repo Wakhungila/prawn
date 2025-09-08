@@ -25,6 +25,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.engine import Engine
 from core.config_manager import ConfigManager
 from core.module_manager import ModuleManager
+from core.memory import AgentContext
+from core.utils import (
+    set_manual_proxy,
+    get_manual_proxy,
+    get_http_log,
+    clear_http_log,
+    export_har,
+    generate_curl_from_entry,
+)
 
 # Configure logger
 logging.basicConfig(level=logging.INFO)
@@ -35,10 +44,18 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24)
 socketio = SocketIO(app)
 
+@app.context_processor
+def inject_flags():
+    return {
+        'BURP_API_ENABLED': bool(BURP_API_URL)
+    }
+
 # AI agent configuration (Ollama)
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434').rstrip('/')
 OLLAMA_API_KEY = os.environ.get('OLLAMA_API_KEY')
 OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1')
+# Optional Burp REST API base (e.g., http://localhost:8090)
+BURP_API_URL = os.environ.get('BURP_API_URL')
 
 # Jinja filter for formatting datetime-like values
 @app.template_filter('format_datetime')
@@ -71,6 +88,7 @@ active_scans = {}
 scan_results = {}
 scan_logs = {}
 engine = None
+memory_ctx = AgentContext()
 
 @app.route('/')
 def index():
@@ -220,6 +238,262 @@ def api_scan_log(scan_id):
     """API endpoint to get scan log lines."""
     return jsonify({'success': True, 'log': scan_logs.get(scan_id, [])})
 
+# Manual Mode / Proxy Controls
+@app.route('/api/manual_mode', methods=['GET', 'POST'])
+def api_manual_mode():
+    try:
+        if request.method == 'GET':
+            state = get_manual_proxy()
+            return jsonify({'success': True, 'enabled': state.get('enabled', False), 'addr': state.get('addr')})
+        data = request.get_json(force=True) or {}
+        enabled = bool(data.get('enabled', False))
+        addr = data.get('addr') or os.environ.get('BURP_PROXY', 'http://127.0.0.1:8080')
+        set_manual_proxy(enabled, addr)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/http_log')
+def api_http_log():
+    try:
+        limit = int(request.args.get('limit', 200))
+        log = get_http_log(limit=limit)
+        # attach index for PoC convenience
+        out = []
+        for i, e in enumerate(log):
+            ee = dict(e)
+            ee['index'] = i
+            out.append(ee)
+        return jsonify({'success': True, 'log': out, 'count': len(out)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/http_log/clear', methods=['POST'])
+def api_http_log_clear():
+    try:
+        clear_http_log()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/har')
+def api_har():
+    try:
+        har = export_har()
+        return jsonify({'success': True, 'har': har})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/evidence')
+def api_evidence():
+    """Return the best-matching HTTP log entry and a curl PoC for a given URL."""
+    try:
+        qurl = request.args.get('url') or (request.json or {}).get('url')
+        if not qurl:
+            return jsonify({'success': False, 'error': 'Missing url'}), 400
+        import urllib.parse as _up
+        try:
+            q = _up.urlparse(qurl)
+            qbase = f"{q.scheme}://{q.netloc}{q.path}"
+        except Exception:
+            qbase = qurl
+        log = get_http_log(limit=1000)
+        best = None
+        best_score = -1
+        for e in log:
+            ru = (e.get('request') or {}).get('url') or ''
+            score = 0
+            if qbase and ru.startswith(qbase):
+                score += 10
+            if q.netloc and q.netloc in ru:
+                score += 5
+            if q.path and q.path in ru:
+                score += 3
+            if score > best_score:
+                best = e
+                best_score = score
+        if not best and log:
+            best = log[-1]
+        if not best:
+            return jsonify({'success': False, 'error': 'No HTTP log entries'}), 404
+        curl = generate_curl_from_entry(best)
+        return jsonify({'success': True, 'entry': best, 'curl': curl})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/curl')
+def api_curl():
+    try:
+        i = int(request.args.get('i', -1))
+        log = get_http_log(limit=500)
+        if not log:
+            return jsonify({'success': False, 'error': 'No log entries'}), 404
+        if i < 0 or i >= len(log):
+            i = len(log) - 1
+        curl = generate_curl_from_entry(log[i])
+        return jsonify({'success': True, 'curl': curl, 'index': i})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/proxy_browser_cmds')
+def api_proxy_browser_cmds():
+    try:
+        state = get_manual_proxy()
+        addr = state.get('addr') or 'http://127.0.0.1:8080'
+        cmds = {
+            'windows': {
+                'chrome': f'"%ProgramFiles%/Google/Chrome/Application/chrome.exe" --proxy-server={addr}',
+                'firefox': 'Open Options → Network Settings → Manual proxy configuration'
+            },
+            'macos': {
+                'chrome': f'/Applications/Google\\ Chrome.app/Contents/MacOS/Google\\ Chrome --proxy-server={addr}',
+                'firefox': 'Preferences → Network Settings → Manual proxy configuration'
+            },
+            'linux': {
+                'chrome': f'google-chrome --proxy-server={addr}',
+                'firefox': 'Preferences → Network Settings → Manual proxy configuration'
+            }
+        }
+        return jsonify({'success': True, 'proxy': addr, 'commands': cmds})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/ai_command', methods=['POST'])
+def ai_command():
+    """Execute simple natural language commands for operational control.
+    Supported intents:
+      - enable/disable manual mode; set proxy address
+      - start scan <url> [modules: xss,sql,...]
+      - export/download har
+      - copy curl (returns curl string)
+      - submit to burp <url> (if BURP_API_URL configured)
+    """
+    try:
+        data = request.get_json(force=True) or {}
+        cmd_raw = (data.get('command') or data.get('message') or '').strip()
+        args = data.get('args') or {}
+        if not cmd_raw:
+            return jsonify({'success': False, 'error': 'No command provided'}), 400
+        cmd = cmd_raw.lower()
+
+        # Manual mode controls
+        if 'enable manual' in cmd or 'turn on manual' in cmd or 'manual mode on' in cmd:
+            addr = args.get('addr') or os.environ.get('BURP_PROXY', 'http://127.0.0.1:8080')
+            set_manual_proxy(True, addr)
+            return jsonify({'success': True, 'action': 'manual_mode', 'enabled': True, 'addr': addr})
+        if 'disable manual' in cmd or 'turn off manual' in cmd or 'manual mode off' in cmd:
+            set_manual_proxy(False, None)
+            return jsonify({'success': True, 'action': 'manual_mode', 'enabled': False})
+        if cmd.startswith('set proxy') or 'set proxy to' in cmd:
+            try:
+                import re
+                m = re.search(r'(http[s]?://[^\s]+)', cmd_raw)
+                addr = m.group(1) if m else (args.get('addr') or 'http://127.0.0.1:8080')
+            except Exception:
+                addr = args.get('addr') or 'http://127.0.0.1:8080'
+            set_manual_proxy(True, addr)
+            return jsonify({'success': True, 'action': 'manual_mode', 'enabled': True, 'addr': addr})
+
+        # Exporters
+        if 'export har' in cmd or 'download har' in cmd or cmd.strip() == 'har':
+            har = export_har()
+            return jsonify({'success': True, 'action': 'export_har', 'har': har})
+        if 'copy curl' in cmd or cmd.strip() == 'curl':
+            log = get_http_log(limit=500)
+            if not log:
+                return jsonify({'success': False, 'error': 'No HTTP log entries to generate curl'}), 404
+            curl = generate_curl_from_entry(log[-1])
+            return jsonify({'success': True, 'action': 'copy_curl', 'curl': curl})
+
+        # Start scan: "start scan <url> [modules: xss,sql,...]"
+        if cmd.startswith('start scan') or cmd.startswith('scan '):
+            try:
+                import re
+                m = re.search(r'(http[s]?://[^\s]+)', cmd_raw)
+                url = m.group(1) if m else (args.get('url'))
+            except Exception:
+                url = args.get('url')
+            if not url:
+                return jsonify({'success': False, 'error': 'No target URL found'}), 400
+            modules = args.get('modules')
+            # Parse modules list if present: modules: xss, sql, csrf
+            if 'modules:' in cmd:
+                try:
+                    after = cmd_raw.split('modules:', 1)[1]
+                    modules = [s.strip() for s in after.split(',') if s.strip()]
+                except Exception:
+                    pass
+            scan_type = 'custom' if modules else 'full'
+            # Prepare scan config and start thread
+            scan_id = f"{int(time.time())}-{url.replace('://', '-').replace('/', '-')}"
+            scan_config = {
+                'target': url,
+                'scan_type': scan_type,
+                'options': {'modules': modules} if modules else {},
+                'output_dir': os.path.join('results', scan_id)
+            }
+            active_scans[scan_id] = {
+                'id': scan_id,
+                'target': url,
+                'scan_type': scan_type,
+                'start_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'status': 'starting',
+                'progress': 0,
+                'modules_completed': 0,
+                'total_modules': 0
+            }
+            t = threading.Thread(target=run_scan, args=(scan_id, scan_config))
+            t.daemon = True
+            t.start()
+            return jsonify({'success': True, 'action': 'start_scan', 'scan_id': scan_id, 'target': url, 'modules': modules or []})
+
+        # Burp submission
+        if 'submit to burp' in cmd or 'send to burp' in cmd or cmd.startswith('burp scan'):
+            if not BURP_API_URL:
+                return jsonify({'success': False, 'error': 'BURP_API_URL not configured'}), 400
+            try:
+                import re
+                m = re.search(r'(http[s]?://[^\s]+)', cmd_raw)
+                url = m.group(1) if m else (args.get('url'))
+            except Exception:
+                url = args.get('url')
+            if not url:
+                return jsonify({'success': False, 'error': 'No target URL found'}), 400
+            resp = requests.post(f"{BURP_API_URL.rstrip('/')}/scan", json={'url': url}, timeout=30)
+            ok = resp.status_code < 400
+            return jsonify({'success': ok, 'action': 'burp_scan', 'status': resp.status_code, 'resp': resp.text[:500]})
+
+        return jsonify({'success': False, 'error': 'Unrecognized command', 'command': cmd_raw}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Optional Burp API wrappers
+@app.route('/api/burp/scan', methods=['POST'])
+def api_burp_scan():
+    try:
+        if not BURP_API_URL:
+            return jsonify({'success': False, 'error': 'BURP_API_URL not configured'}), 400
+        data = request.get_json(force=True) or {}
+        url = data.get('url')
+        if not url:
+            return jsonify({'success': False, 'error': 'Missing url'}), 400
+        resp = requests.post(f"{BURP_API_URL.rstrip('/')}/scan", json={'url': url}, timeout=30)
+        return jsonify({'success': resp.status_code < 400, 'status': resp.status_code, 'resp': resp.text[:500]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/burp/issues')
+def api_burp_issues():
+    try:
+        if not BURP_API_URL:
+            return jsonify({'success': False, 'error': 'BURP_API_URL not configured'}), 400
+        resp = requests.get(f"{BURP_API_URL.rstrip('/')}/issues", timeout=30)
+        ok = resp.status_code < 400
+        jr = resp.json() if ok else {'error': resp.text[:500]}
+        return jsonify({'success': ok, 'issues': jr})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/ai_chat', methods=['GET', 'POST'])
 def ai_chat():
     """Proxy chat requests to an Ollama backend (Jarvis-like conversation)."""
@@ -312,6 +586,17 @@ def run_scan(scan_id, config):
         
         # Configure the engine for this scan
         engine.config.update(config)
+        # Ensure scan_id is available in engine config for downstream consumers
+        try:
+            engine.config['scan_id'] = scan_id
+        except Exception:
+            pass
+
+        # Record scan start in persistent memory
+        try:
+            memory_ctx.start_scan(config.get('target'), scan_id, config)
+        except Exception:
+            pass
         
         # Register progress callback
         def progress_callback(module_name, progress, message):
@@ -342,6 +627,11 @@ def run_scan(scan_id, config):
                 scan_logs.setdefault(scan_id, []).append(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - [Finding/{sev}] {vtype}")
             except Exception:
                 pass
+            # Persist finding to memory
+            try:
+                memory_ctx.record_findings_bulk(active_scans[scan_id]['target'], scan_id, [vulnerability] if isinstance(vulnerability, dict) else [])
+            except Exception:
+                pass
             socketio.emit('vulnerability_found', {
                 'scan_id': scan_id,
                 'vulnerability': vulnerability
@@ -367,6 +657,11 @@ def run_scan(scan_id, config):
             scan_logs.setdefault(scan_id, []).append(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Scan completed")
         except Exception:
             pass
+        # Persist scan end in memory
+        try:
+            memory_ctx.end_scan(active_scans[scan_id]['target'], scan_id, status='completed')
+        except Exception:
+            pass
         
         # Emit completion event
         socketio.emit('scan_complete', {'scan_id': scan_id, 'status': 'completed'})
@@ -377,6 +672,11 @@ def run_scan(scan_id, config):
         active_scans[scan_id]['error'] = str(e)
         try:
             scan_logs.setdefault(scan_id, []).append(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Error: {str(e)}")
+        except Exception:
+            pass
+        # Persist error end state
+        try:
+            memory_ctx.end_scan(active_scans.get(scan_id, {}).get('target'), scan_id, status='error')
         except Exception:
             pass
         socketio.emit('scan_error', {'scan_id': scan_id, 'error': str(e)})

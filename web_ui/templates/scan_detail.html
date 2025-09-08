@@ -70,7 +70,7 @@
                             </div>
                             <div class="card-body">
                                 <div class="progress mb-3">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ scan.progress }}%" aria-valuenow="{{ scan.progress }}" aria-valuemin="0" aria-valuemax="100">{{ scan.progress }}%</div>
+                                    <div class="progress-bar" role="progressbar" style="width: {{ scan.progress|default(0) }}%" aria-valuenow="{{ scan.progress|default(0) }}" aria-valuemin="0" aria-valuemax="100">{{ scan.progress|default(0) }}%</div>
                                 </div>
                                 
                                 <div id="current-module-info">
@@ -125,6 +125,7 @@
                                     <th>Severity</th>
                                     <th>Parameter</th>
                                     <th>Details</th>
+                                    <th>Evidence</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -158,9 +159,60 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
-{% endblock %}
+        
+        <!-- Scan Evidence Modal -->
+        <div class="modal fade" id="scanEvidenceModal" tabindex="-1" aria-labelledby="scanEvidenceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="scanEvidenceModalLabel">Request/Response Evidence</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+        <div class="mb-3">
+        <h6>Request</h6>
+        <pre id="scan-evidence-req" class="bg-dark text-light p-3 rounded" style="max-height: 250px; overflow:auto;"></pre>
+        </div>
+        <div>
+        <h6>Response</h6>
+        <pre id="scan-evidence-resp" class="bg-dark text-light p-3 rounded" style="max-height: 350px; overflow:auto;"></pre>
+        </div>
+        </div>
+        <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="copy-curl-scan">Copy curl</button>
+        </div>
+        </div>
+        </div>
+        </div>
+        <script>
+        $(function(){
+        $(document).on('click', '.scan-evidence', async function(){
+        const url = $(this).data('url');
+        const modalEl = document.getElementById('scanEvidenceModal');
+        const modal = new bootstrap.Modal(modalEl);
+        $('#scan-evidence-req').text('Loading...');
+        $('#scan-evidence-resp').text('');
+        modal.show();
+        try {
+        const res = await fetch(`/api/evidence?url=${encodeURIComponent(url)}`);
+        const jr = await res.json();
+        if (!jr.success) { $('#scan-evidence-req').text('No evidence found'); return; }
+        const req = (jr.entry||{}).request||{}; const resp = (jr.entry||{}).response||{};
+        const reqText = [`${req.method||'GET'} ${req.url||''}`].concat(Object.entries(req.headers||{}).map(([k,v])=>`${k}: ${v}`)).concat(['', req.data||'']).join('\n');
+        const respText = [`Status: ${resp.status||''}  Time: ${resp.time_ms||0} ms`].concat(Object.entries(resp.headers||{}).map(([k,v])=>`${k}: ${v}`)).concat(['', (resp.text||'').slice(0,100000)]).join('\n');
+        $('#scan-evidence-req').text(reqText);
+        $('#scan-evidence-resp').text(respText);
+        $('#copy-curl-scan').attr('data-curl', jr.curl||'');
+        } catch(e){ $('#scan-evidence-req').text('Error loading evidence'); }
+        });
+        $('#copy-curl-scan').on('click', async function(){
+        const curl = $(this).attr('data-curl')||''; if (!curl) { alert('No curl available'); return; }
+        try{ await navigator.clipboard.writeText(curl); alert('Copied curl'); }catch(e){ alert('Copy failed'); }
+        });
+        });
+        </script>
+        {% endblock %}
 
 {% block extra_js %}
 <script>
@@ -265,6 +317,9 @@
                                         <button class="btn btn-sm btn-info view-details" data-bs-toggle="modal" data-bs-target="#vulnDetailsModal" data-vuln-index="${response.results.vulnerabilities.indexOf(vuln)}">
                                             View Details
                                         </button>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-info scan-evidence" data-url="${vuln.url}">Evidence</button>
                                     </td>
                                 </tr>
                             `;

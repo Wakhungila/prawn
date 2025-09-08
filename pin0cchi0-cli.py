@@ -29,6 +29,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from core.engine import Engine
 from core.config_manager import ConfigManager
 from core.module_manager import ModuleManager
+from core.utils import (
+    set_manual_proxy,
+    get_http_log,
+    clear_http_log,
+    export_har,
+    generate_curl_from_entry,
+)
 
 class PIN0CCHI0_CLI:
     """Command Line Interface for PIN0CCHI0 security testing framework."""
@@ -96,6 +103,60 @@ class PIN0CCHI0_CLI:
         if parsed_args.command == 'scan':
             return self.run_scan(parsed_args)
         
+        # HAR export
+        if parsed_args.command == 'har':
+            try:
+                har = export_har()
+                out = getattr(parsed_args, 'export', None)
+                if out:
+                    with open(out, 'w', encoding='utf-8') as f:
+                        json.dump(har, f, indent=2)
+                    print(f"HAR written to: {out}")
+                else:
+                    print(json.dumps(har, indent=2))
+                return 0
+            except Exception as e:
+                logger.error(f"HAR export failed: {e}")
+                return 1
+        
+        # HTTP log operations
+        if parsed_args.command == 'http-log':
+            action = getattr(parsed_args, 'action', 'show')
+            if action == 'show':
+                try:
+                    limit = getattr(parsed_args, 'limit', 200)
+                    log = get_http_log(limit=limit)
+                    print(json.dumps({'count': len(log), 'entries': log}, indent=2))
+                    return 0
+                except Exception as e:
+                    logger.error(f"Failed to show HTTP log: {e}")
+                    return 1
+            if action == 'clear':
+                try:
+                    clear_http_log()
+                    print('HTTP log cleared')
+                    return 0
+                except Exception as e:
+                    logger.error(f"Failed to clear HTTP log: {e}")
+                    return 1
+        
+        # curl generation
+        if parsed_args.command == 'curl':
+            try:
+                idx = getattr(parsed_args, 'index', -1)
+                log = get_http_log(limit=500)
+                if not log:
+                    print('No HTTP log entries')
+                    return 1
+                if idx < 0 or idx >= len(log):
+                    idx = len(log) - 1
+                curl = generate_curl_from_entry(log[idx])
+                print(curl)
+                return 0
+            except Exception as e:
+                logger.error(f"Failed to generate curl: {e}")
+                return 1
+        
         # Handle version command
         if parsed_args.command == 'version':
             print("PIN0CCHI0 Security Testing Framework v0.1.0")
@@ -135,6 +196,21 @@ class PIN0CCHI0_CLI:
         scan_parser.add_argument('--quiet', '-q', action='store_true', help='Suppress output except for results')
         scan_parser.add_argument('--json', '-j', action='store_true', help='Output results in JSON format')
         scan_parser.add_argument('--autonomous', '-a', action='store_true', help='Run in fully autonomous mode')
+        scan_parser.add_argument('--manual-proxy', help='Route HTTP via proxy (e.g., http://127.0.0.1:8080)')
+        scan_parser.add_argument('--no-manual-proxy', action='store_true', help='Disable manual proxy routing')
+        
+        # HAR export subcommand
+        har_parser = subparsers.add_parser('har', help='HAR operations (export)')
+        har_parser.add_argument('--export', '-o', help='Write HAR to file (default prints to stdout)')
+        
+        # HTTP log subcommand
+        http_log_parser = subparsers.add_parser('http-log', help='HTTP log operations')
+        http_log_parser.add_argument('action', choices=['show', 'clear'], help='Action to perform')
+        http_log_parser.add_argument('--limit', type=int, default=200, help='Number of entries to show')
+        
+        # curl subcommand
+        curl_parser = subparsers.add_parser('curl', help='Generate curl from captured HTTP log')
+        curl_parser.add_argument('--index', '-i', type=int, default=-1, help='Log entry index (default last)')
         
         return parser
     
@@ -195,6 +271,17 @@ class PIN0CCHI0_CLI:
         
         # Create output directory
         os.makedirs(scan_config['output_dir'], exist_ok=True)
+        
+        # Manual proxy settings
+        try:
+            if getattr(args, 'manual_proxy', None):
+                set_manual_proxy(True, args.manual_proxy)
+                logger.info(f"Manual proxy enabled: {args.manual_proxy}")
+            elif getattr(args, 'no_manual_proxy', False):
+                set_manual_proxy(False, None)
+                logger.info("Manual proxy disabled")
+        except Exception as e:
+            logger.warning(f"Failed to set manual proxy: {e}")
         
         # Update engine configuration
         self.engine.config.update(scan_config)

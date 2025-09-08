@@ -18,6 +18,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 from core.base_module import VulnTestingModule
 from core.utils import make_request, run_command, ensure_dir_exists
+from core.payloads import generate_payloads, waf_fingerprint
+from core.memory import AgentContext
 
 # Configure logger
 logger = logging.getLogger('pin0cchi0.vuln_testing.sql_injection')
@@ -43,6 +45,11 @@ class SQLInjectionTester(VulnTestingModule):
         self.vulnerabilities = []
         self.tested_endpoints = set()
         self.confirmed_vulnerabilities = []
+        # Persistent learning context
+        try:
+            self.ctx = AgentContext()
+        except Exception:
+            self.ctx = None
         
         # SQL injection payloads
         self.error_based_payloads = [
@@ -366,6 +373,7 @@ class SQLInjectionTester(VulnTestingModule):
         """Test for error-based SQL injection."""
         path = parsed_url.path
         query = parsed_url.query
+        target_base = f"{parsed_url.scheme}://{parsed_url.netloc}"
         
         # Get a baseline response
         baseline_response = make_request(url)
@@ -373,18 +381,38 @@ class SQLInjectionTester(VulnTestingModule):
         if not baseline_response['success']:
             return
         
+        # Build adaptive payloads (fallback to static list)
+        hints = {}
+        payload_defs = generate_payloads('sqli', hints=hints, limit=20) or []
+        if not payload_defs:
+            payload_defs = [{'key': None, 'value': p} for p in self.error_based_payloads]
+        
         # Test each payload
-        for payload in self.error_based_payloads:
+        for p in payload_defs:
+            payload_key = p.get('key') if isinstance(p, dict) else None
+            payload = p.get('value') if isinstance(p, dict) else str(p)
             # Replace parameter value with payload
             new_query = self._replace_param_value(query, param_name, payload)
             test_url = f"{parsed_url.scheme}://{parsed_url.netloc}{path}?{new_query}"
             
             # Send request with payload
+            t0 = time.time()
             response = make_request(test_url)
+            dt = time.time() - t0
             
             if not response['success']:
+                # Learn failure outcome
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, last_outcome='failure', latency_ms=dt*1000)
+                except Exception:
+                    pass
                 continue
             
+            # WAF fingerprint
+            waf_sig = waf_fingerprint(response.get('status_code', 0), response.get('headers', {}), (response.get('text') or '')[:300])
+            
+            found = False
             # Check for SQL error patterns in the response
             for pattern in self.sql_error_patterns:
                 if re.search(pattern, response['text'], re.IGNORECASE):
@@ -401,24 +429,44 @@ class SQLInjectionTester(VulnTestingModule):
                     }
                     self.vulnerabilities.append(vuln)
                     logger.info(f"Found error-based SQL injection vulnerability in parameter {param_name} on {url}")
-                    return  # Found a vulnerability, no need to test more payloads
+                    found = True
+                    break
             
-            # Check for significant response differences
-            if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
-                vuln = {
-                    'name': "Potential SQL Injection",
-                    'severity': "medium",
-                    'description': "A potential SQL injection vulnerability was found based on response size difference.",
-                    'location': url,
-                    'parameter': param_name,
-                    'payload': payload,
-                    'evidence': f"Response size changed significantly with payload",
-                    'type': 'sqli_potential',
-                    'remediation': "Use parameterized queries or prepared statements"
-                }
-                self.vulnerabilities.append(vuln)
-                logger.info(f"Found potential SQL injection vulnerability in parameter {param_name} on {url}")
-                return  # Found a potential vulnerability, no need to test more payloads
+            if not found:
+                # Check for significant response differences
+                try:
+                    if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
+                        vuln = {
+                            'name': "Potential SQL Injection",
+                            'severity': "medium",
+                            'description': "A potential SQL injection vulnerability was found based on response size difference.",
+                            'location': url,
+                            'parameter': param_name,
+                            'payload': payload,
+                            'evidence': f"Response size changed significantly with payload",
+                            'type': 'sqli_potential',
+                            'remediation': "Use parameterized queries or prepared statements"
+                        }
+                        self.vulnerabilities.append(vuln)
+                        logger.info(f"Found potential SQL injection vulnerability in parameter {param_name} on {url}")
+                        found = True
+                except Exception:
+                    pass
+            
+            # Learn outcome
+            try:
+                if self.ctx:
+                    blocked = (response.get('status_code') in (403, 406)) or bool(waf_sig)
+                    self.ctx.learn_payload_outcome(
+                        target_base, 'sqli', payload_key or f"raw:{payload}",
+                        success=found, waf_signature=waf_sig, latency_ms=dt*1000,
+                        last_outcome='blocked' if blocked and not found else ('success' if found else 'failure')
+                    )
+            except Exception:
+                pass
+            
+            if found:
+                return  # Stop after first finding
     
     def _test_blind(self, url, param_name, parsed_url):
         """Test for blind SQL injection."""
@@ -481,8 +529,18 @@ class SQLInjectionTester(VulnTestingModule):
         if not baseline_response['success']:
             return
         
+        target_base = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        # Build time-based payloads (filter by tag)
+        cand = generate_payloads('sqli', hints={'comment': '--'}, limit=30)
+        time_payloads = [p for p in cand if isinstance(p, dict) and 'time' in (p.get('tags') or [])]
+        if not time_payloads:
+            time_payloads = [{'key': None, 'value': p, 'meta': {'delay_s': 5}} for p in self.time_based_payloads]
+        
         # Test each time-based payload
-        for payload in self.time_based_payloads:
+        for p in time_payloads:
+            payload_key = p.get('key')
+            payload = p.get('value')
+            delay = (p.get('meta') or {}).get('delay_s', 5)
             # Replace parameter value with payload
             new_query = self._replace_param_value(query, param_name, payload)
             test_url = f"{parsed_url.scheme}://{parsed_url.netloc}{path}?{new_query}"
@@ -493,11 +551,18 @@ class SQLInjectionTester(VulnTestingModule):
             response_time = time.time() - start_time
             
             if not response['success']:
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, last_outcome='failure', latency_ms=response_time*1000)
+                except Exception:
+                    pass
                 continue
             
-            # Check if response time is significantly longer
-            # Using a threshold of 4 seconds (assuming SLEEP(5) payload)
-            if response_time > baseline_time + 4:
+            # WAF and timing
+            waf_sig = waf_fingerprint(response.get('status_code', 0), response.get('headers', {}), (response.get('text') or '')[:300])
+            threshold = max(4, delay - 1)  # conservative threshold
+            
+            if response_time > baseline_time + threshold:
                 vuln = {
                     'name': "Time-based SQL Injection",
                     'severity': "high",
@@ -511,7 +576,19 @@ class SQLInjectionTester(VulnTestingModule):
                 }
                 self.vulnerabilities.append(vuln)
                 logger.info(f"Found time-based SQL injection vulnerability in parameter {param_name} on {url}")
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=True, waf_signature=waf_sig, latency_ms=response_time*1000, last_outcome='success')
+                except Exception:
+                    pass
                 return  # Found a vulnerability, no need to test more payloads
+            else:
+                try:
+                    if self.ctx:
+                        blocked = (response.get('status_code') in (403, 406)) or bool(waf_sig)
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, waf_signature=waf_sig, latency_ms=response_time*1000, last_outcome='blocked' if blocked else 'failure')
+                except Exception:
+                    pass
     
     def _test_error_based_post(self, url, param_name):
         """Test for error-based SQL injection using POST requests."""
@@ -521,14 +598,33 @@ class SQLInjectionTester(VulnTestingModule):
         if not baseline_response['success']:
             return
         
+        # Adaptive payloads
+        payload_defs = generate_payloads('sqli', hints={}, limit=20) or []
+        if not payload_defs:
+            payload_defs = [{'key': None, 'value': p} for p in self.error_based_payloads]
+
+        target_base = f"{urllib.parse.urlparse(url).scheme}://{urllib.parse.urlparse(url).netloc}"
+        
         # Test each payload
-        for payload in self.error_based_payloads:
+        for p in payload_defs:
+            payload_key = p.get('key') if isinstance(p, dict) else None
+            payload = p.get('value') if isinstance(p, dict) else str(p)
+            
             # Send request with payload
+            t0 = time.time()
             response = make_request(url, method='POST', data={param_name: payload})
+            dt = time.time() - t0
             
             if not response['success']:
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, last_outcome='failure', latency_ms=dt*1000)
+                except Exception:
+                    pass
                 continue
             
+            waf_sig = waf_fingerprint(response.get('status_code', 0), response.get('headers', {}), (response.get('text') or '')[:300])
+            found = False
             # Check for SQL error patterns in the response
             for pattern in self.sql_error_patterns:
                 if re.search(pattern, response['text'], re.IGNORECASE):
@@ -545,24 +641,39 @@ class SQLInjectionTester(VulnTestingModule):
                     }
                     self.vulnerabilities.append(vuln)
                     logger.info(f"Found error-based SQL injection vulnerability in POST parameter {param_name} on {url}")
-                    return  # Found a vulnerability, no need to test more payloads
+                    found = True
+                    break
             
             # Check for significant response differences
-            if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
-                vuln = {
-                    'name': "Potential SQL Injection (POST)",
-                    'severity': "medium",
-                    'description': "A potential SQL injection vulnerability was found in a POST parameter based on response size difference.",
-                    'location': url,
-                    'parameter': param_name,
-                    'payload': payload,
-                    'evidence': f"Response size changed significantly with payload",
-                    'type': 'sqli_potential_post',
-                    'remediation': "Use parameterized queries or prepared statements"
-                }
-                self.vulnerabilities.append(vuln)
-                logger.info(f"Found potential SQL injection vulnerability in POST parameter {param_name} on {url}")
-                return  # Found a potential vulnerability, no need to test more payloads
+            if not found:
+                try:
+                    if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
+                        vuln = {
+                            'name': "Potential SQL Injection (POST)",
+                            'severity': "medium",
+                            'description': "A potential SQL injection vulnerability was found in a POST parameter based on response size difference.",
+                            'location': url,
+                            'parameter': param_name,
+                            'payload': payload,
+                            'evidence': f"Response size changed significantly with payload",
+                            'type': 'sqli_potential_post',
+                            'remediation': "Use parameterized queries or prepared statements"
+                        }
+                        self.vulnerabilities.append(vuln)
+                        logger.info(f"Found potential SQL injection vulnerability in POST parameter {param_name} on {url}")
+                        found = True
+                except Exception:
+                    pass
+            
+            try:
+                if self.ctx:
+                    blocked = (response.get('status_code') in (403, 406)) or bool(waf_sig)
+                    self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=found, waf_signature=waf_sig, latency_ms=dt*1000, last_outcome='blocked' if blocked and not found else ('success' if found else 'failure'))
+            except Exception:
+                pass
+            
+            if found:
+                return  # stop after first finding
     
     def _test_blind_post(self, url, param_name):
         """Test for blind SQL injection using POST requests."""
@@ -611,18 +722,34 @@ class SQLInjectionTester(VulnTestingModule):
         if not baseline_response['success']:
             return
         
+        target_base = f"{urllib.parse.urlparse(url).scheme}://{urllib.parse.urlparse(url).netloc}"
+        cand = generate_payloads('sqli', hints={'comment': '--'}, limit=30)
+        time_payloads = [p for p in cand if isinstance(p, dict) and 'time' in (p.get('tags') or [])]
+        if not time_payloads:
+            time_payloads = [{'key': None, 'value': p, 'meta': {'delay_s': 5}} for p in self.time_based_payloads]
+        
         # Test each time-based payload
-        for payload in self.time_based_payloads:
+        for p in time_payloads:
+            payload_key = p.get('key')
+            payload = p.get('value')
+            delay = (p.get('meta') or {}).get('delay_s', 5)
             # Send request with payload and measure time
             start_time = time.time()
             response = make_request(url, method='POST', data={param_name: payload})
             response_time = time.time() - start_time
             
             if not response['success']:
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, last_outcome='failure', latency_ms=response_time*1000)
+                except Exception:
+                    pass
                 continue
             
-            # Check if response time is significantly longer
-            if response_time > baseline_time + 4:
+            waf_sig = waf_fingerprint(response.get('status_code', 0), response.get('headers', {}), (response.get('text') or '')[:300])
+            threshold = max(4, delay - 1)
+            
+            if response_time > baseline_time + threshold:
                 vuln = {
                     'name': "Time-based SQL Injection (POST)",
                     'severity': "high",
@@ -636,7 +763,19 @@ class SQLInjectionTester(VulnTestingModule):
                 }
                 self.vulnerabilities.append(vuln)
                 logger.info(f"Found time-based SQL injection vulnerability in POST parameter {param_name} on {url}")
+                try:
+                    if self.ctx:
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=True, waf_signature=waf_sig, latency_ms=response_time*1000, last_outcome='success')
+                except Exception:
+                    pass
                 return  # Found a vulnerability, no need to test more payloads
+            else:
+                try:
+                    if self.ctx:
+                        blocked = (response.get('status_code') in (403, 406)) or bool(waf_sig)
+                        self.ctx.learn_payload_outcome(target_base, 'sqli', payload_key or f"raw:{payload}", success=False, waf_signature=waf_sig, latency_ms=response_time*1000, last_outcome='blocked' if blocked else 'failure')
+                except Exception:
+                    pass
     
     def _test_headers(self, target):
         """Test HTTP headers for SQL injection vulnerabilities."""

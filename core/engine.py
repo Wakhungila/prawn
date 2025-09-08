@@ -14,6 +14,7 @@ import sys
 import logging
 import argparse
 from datetime import datetime
+from core.memory import AgentContext
 
 # Setup logging
 logging.basicConfig(
@@ -34,6 +35,11 @@ class Engine:
         # Expose a mutable config dict compatible with app.py usage
         self.config = self.config_manager.config
         self._callbacks = {}
+        # Persistent agent memory / prioritization
+        try:
+            self.ctx = AgentContext()
+        except Exception:
+            self.ctx = None
 
     def set_callback(self, event, func):
         """Register a callback for events like 'progress' and 'vulnerability'."""
@@ -95,10 +101,24 @@ class Engine:
                 result = self.module_manager.execute_module(cat, mod_name, target=target, output_dir=output_dir, config=cfg)
             except Exception as e:
                 logger.error(f"Error executing {cat}/{mod_name}: {e}")
+                # Persist failure for active learning
+                try:
+                    if self.ctx:
+                        self.ctx.note_failure(target, cfg.get('scan_id', ''), f"{cat}/{mod_name}", target, str(e))
+                except Exception:
+                    pass
             if isinstance(result, dict):
                 for v in result.get('vulnerabilities', []) or []:
                     self._emit('vulnerability', v)
                     findings.append(v)
+            # Remember newly discovered endpoints from recon modules
+            if cat == 'recon':
+                try:
+                    urls = (result or {}).get('discovered_urls') or []
+                    if urls and self.ctx:
+                        self.ctx.remember_endpoints(target, urls)
+                except Exception:
+                    pass
             self._emit('progress', mod_name, 100, "Module completed")
 
         # Final deep scan with nuclei as last resolve
@@ -115,7 +135,7 @@ class Engine:
 
         return {'target': target, 'vulnerabilities': findings}
 
-def _run_autonomous(self, cfg):
+    def _run_autonomous(self, cfg):
         """Autonomous agent loop: perceive -> plan -> act -> learn."""
         import json as _json
         target = cfg.get('target')
@@ -135,7 +155,16 @@ def _run_autonomous(self, cfg):
         # Helper to execute a module and collect vulns
         def exec_mod(cat, name, progress_hint=0, message=""):
             self._emit('progress', name, progress_hint, message or f"Starting {name}")
-            res = self.module_manager.execute_module(cat, name, target=cur_target, output_dir=output_dir, config=cfg)
+            res = None
+            try:
+                res = self.module_manager.execute_module(cat, name, target=cur_target, output_dir=output_dir, config=cfg)
+            except Exception as e:
+                logger.debug(f"Error executing {cat}/{name} on {cur_target}: {e}")
+                try:
+                    if self.ctx:
+                        self.ctx.note_failure(target, cfg.get('scan_id', ''), f"{cat}/{name}", cur_target, str(e))
+                except Exception:
+                    pass
             if isinstance(res, dict):
                 for v in res.get('vulnerabilities', []) or []:
                     self._emit('vulnerability', v)
@@ -159,6 +188,27 @@ def _run_autonomous(self, cfg):
                     seen_endpoints.add(u)
                     if depth + 1 <= max_depth:
                         queue.append((u, depth + 1))
+            # Persist discovered endpoints
+            try:
+                if new_urls and self.ctx:
+                    self.ctx.remember_endpoints(target, new_urls)
+            except Exception:
+                pass
+            # Merge prioritized queue from memory (front-load high-score / low-coverage)
+            try:
+                if self.ctx:
+                    pri = self.ctx.prioritize(target, limits={'limit': 20}) or []
+                    for item in pri:
+                        u = item.get('url')
+                        if not u or u in seen_endpoints:
+                            continue
+                        seen_endpoints.add(u)
+                        # Prepend high-priority endpoints with capped depth
+                        queue.insert(0, (u, min(depth + 1, max_depth)))
+                    # Provide focus endpoints hint to modules via config (optional usage)
+                    cfg['focus_endpoints'] = [it.get('url') for it in pri[:10] if it.get('url')]
+            except Exception:
+                pass
 
             # api_discovery
             res_api = exec_mod('recon', 'api_discovery', 15, 'API discovery')
@@ -178,6 +228,25 @@ def _run_autonomous(self, cfg):
                                     queue.append((ep_url, depth + 1))
                 except Exception as e:
                     logger.debug(f"Failed reading API discovery results: {e}")
+            # Persist API endpoints
+            try:
+                if api_urls and self.ctx:
+                    self.ctx.remember_endpoints(target, api_urls)
+            except Exception:
+                pass
+            # Update prioritized queue again after API discovery
+            try:
+                if self.ctx:
+                    pri = self.ctx.prioritize(target, limits={'limit': 20}) or []
+                    for item in pri:
+                        u = item.get('url')
+                        if not u or u in seen_endpoints:
+                            continue
+                        seen_endpoints.add(u)
+                        queue.insert(0, (u, min(depth + 1, max_depth)))
+                    cfg['focus_endpoints'] = [it.get('url') for it in pri[:10] if it.get('url')]
+            except Exception:
+                pass
 
             # tech_fingerprint (optional)
             try:
@@ -187,6 +256,7 @@ def _run_autonomous(self, cfg):
 
             # Plan: decide next tests based on what we saw
             # Heuristics: prioritize API endpoints, forms/params, and auth/admin paths
+            # Memory-driven focus hint is available in cfg['focus_endpoints'] for modules that support it
             candidate_tests = [
                 ('vuln_testing', 'http_security_scanner'),
                 ('vuln_testing', 'insecure_design_scanner'),
@@ -215,6 +285,8 @@ def _run_autonomous(self, cfg):
 
         # Done
         return {'target': target, 'vulnerabilities': findings}
+
+    
 
 class PIN0CCHI0Engine:
     """Main engine class for the PIN0CCHI0 framework."""

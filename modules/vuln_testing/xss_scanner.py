@@ -19,6 +19,8 @@ from html import escape
 
 from core.base_module import VulnTestingModule
 from core.utils import make_request, run_command, ensure_dir_exists
+from core.payloads import generate_payloads
+from core.memory import AgentContext
 
 # Configure logger
 logger = logging.getLogger('pin0cchi0.vuln_testing.xss_scanner')
@@ -44,6 +46,11 @@ class XSSScanner(VulnTestingModule):
         self.vulnerabilities = []
         self.tested_endpoints = set()
         self.confirmed_vulnerabilities = []
+        # Persistent learning context
+        try:
+            self.ctx = AgentContext()
+        except Exception:
+            self.ctx = None
         
         # XSS payloads
         self.reflected_xss_payloads = [
@@ -330,8 +337,14 @@ class XSSScanner(VulnTestingModule):
         path = parsed_url.path
         query = parsed_url.query
         
+        # Adaptive payloads (fallback to static list)
+        payload_defs = generate_payloads('xss', hints={}, limit=20) or []
+        if not payload_defs:
+            payload_defs = [{'key': None, 'value': p} for p in self.reflected_xss_payloads]
+
         # Test each payload
-        for payload in self.reflected_xss_payloads:
+        for p in payload_defs:
+            payload = p.get('value') if isinstance(p, dict) else str(p)
             # Replace parameter value with payload
             new_query = self._replace_param_value(query, param_name, payload)
             test_url = f"{parsed_url.scheme}://{parsed_url.netloc}{path}?{new_query}"
@@ -362,8 +375,14 @@ class XSSScanner(VulnTestingModule):
     
     def _test_reflected_xss_post(self, url, param_name):
         """Test for reflected XSS in a POST parameter."""
+        # Adaptive payloads (fallback to static list)
+        payload_defs = generate_payloads('xss', hints={}, limit=20) or []
+        if not payload_defs:
+            payload_defs = [{'key': None, 'value': p} for p in self.reflected_xss_payloads]
+        
         # Test each payload
-        for payload in self.reflected_xss_payloads:
+        for p in payload_defs:
+            payload = p.get('value') if isinstance(p, dict) else str(p)
             # Send request with payload
             response = make_request(url, method='POST', data={param_name: payload})
             

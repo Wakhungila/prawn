@@ -15,8 +15,95 @@ import string
 import logging
 import subprocess
 from urllib.parse import urlparse
+from datetime import datetime
 
 logger = logging.getLogger('PIN0CCHI0.Utils')
+
+# Manual mode proxy + HTTP log (for HAR/PoC export)
+_MANUAL_PROXY_ENABLED = False
+_MANUAL_PROXY_ADDR = None  # e.g., 'http://127.0.0.1:8080'
+_HTTP_LOG = []  # list of {ts, request: {...}, response: {...}}
+
+def set_manual_proxy(enabled: bool, addr: str = None):
+    global _MANUAL_PROXY_ENABLED, _MANUAL_PROXY_ADDR
+    _MANUAL_PROXY_ENABLED = bool(enabled)
+    if addr:
+        _MANUAL_PROXY_ADDR = addr
+    logger.info(f"Manual proxy set: enabled={_MANUAL_PROXY_ENABLED}, addr={_MANUAL_PROXY_ADDR}")
+
+def get_manual_proxy():
+    return {'enabled': _MANUAL_PROXY_ENABLED, 'addr': _MANUAL_PROXY_ADDR}
+
+def _append_http_log(entry: dict):
+    try:
+        entry['ts'] = datetime.utcnow().isoformat() + 'Z'
+        _HTTP_LOG.append(entry)
+        # bound log size
+        if len(_HTTP_LOG) > 5000:
+            del _HTTP_LOG[: len(_HTTP_LOG) - 5000]
+    except Exception:
+        pass
+
+def get_http_log(limit: int = 500) -> list:
+    if limit and limit > 0:
+        return _HTTP_LOG[-limit:]
+    return list(_HTTP_LOG)
+
+def clear_http_log():
+    _HTTP_LOG.clear()
+
+def export_har(entries: list = None) -> dict:
+    """Export a minimal HAR dictionary from logged entries."""
+    items = entries if entries is not None else get_http_log()
+    har_entries = []
+    for e in items:
+        req = e.get('request', {})
+        resp = e.get('response', {})
+        har_entries.append({
+            'startedDateTime': e.get('ts') or datetime.utcnow().isoformat() + 'Z',
+            'time': resp.get('time_ms', 0),
+            'request': {
+                'method': req.get('method', 'GET'),
+                'url': req.get('url', ''),
+                'httpVersion': 'HTTP/1.1',
+                'headers': [{'name': k, 'value': v} for k, v in (req.get('headers') or {}).items()],
+                'queryString': [],
+                'cookies': [],
+                'headersSize': -1,
+                'bodySize': len((req.get('data') or '')) if isinstance(req.get('data'), str) else -1,
+                'postData': {'mimeType': 'application/x-www-form-urlencoded', 'text': req.get('data') or ''} if req.get('data') else None,
+            },
+            'response': {
+                'status': resp.get('status', 0),
+                'statusText': '',
+                'httpVersion': 'HTTP/1.1',
+                'headers': [{'name': k, 'value': v} for k, v in (resp.get('headers') or {}).items()],
+                'cookies': [],
+                'content': {'size': len(resp.get('text') or ''), 'mimeType': resp.get('headers', {}).get('content-type', ''), 'text': resp.get('text') or ''},
+                'redirectURL': '',
+                'headersSize': -1,
+                'bodySize': len(resp.get('text') or ''),
+            },
+            'cache': {},
+            'timings': {'send': 0, 'wait': resp.get('time_ms', 0), 'receive': 0},
+            'serverIPAddress': '',
+            'connection': ''
+        })
+    return {'log': {'version': '1.2', 'creator': {'name': 'PIN0CCHI0', 'version': '0.1'}, 'entries': har_entries}}
+
+def generate_curl_from_entry(entry: dict) -> str:
+    req = entry.get('request', {})
+    method = req.get('method', 'GET')
+    url = req.get('url', '')
+    headers = req.get('headers') or {}
+    data = req.get('data')
+    parts = ['curl', '-i', '-sS', '-k', '-X', method]
+    for k, v in headers.items():
+        parts += ['-H', f"{k}: {v}"]
+    if data:
+        parts += ['--data', data]
+    parts.append(url)
+    return ' '.join(parts)
 
 # User agent list for randomization
 USER_AGENTS = [
@@ -94,13 +181,18 @@ def run_command(command, timeout=60):
         }
 
 def make_request(url, method='GET', headers=None, data=None, params=None, timeout=30, verify=True, allow_redirects=True, proxies=None):
-    """Make an HTTP request and return the response."""
+    """Make an HTTP request and return the response. Honors Manual Mode proxy and logs request/response for export."""
     if headers is None:
         headers = {'User-Agent': get_random_user_agent()}
     
+    eff_proxies = proxies
+    if eff_proxies is None and _MANUAL_PROXY_ENABLED and _MANUAL_PROXY_ADDR:
+        eff_proxies = {'http': _MANUAL_PROXY_ADDR, 'https': _MANUAL_PROXY_ADDR}
+    
+    req_record = {'method': method, 'url': url, 'headers': dict(headers or {}), 'data': data if isinstance(data, str) else (json.dumps(data) if isinstance(data, dict) else None)}
     try:
-        # Lazy import to avoid hard dependency during test discovery
         import requests
+        t0 = datetime.utcnow()
         response = requests.request(
             method=method,
             url=url,
@@ -110,8 +202,16 @@ def make_request(url, method='GET', headers=None, data=None, params=None, timeou
             timeout=timeout,
             verify=verify,
             allow_redirects=allow_redirects,
-            proxies=proxies
+            proxies=eff_proxies
         )
+        dt_ms = int((datetime.utcnow() - t0).total_seconds() * 1000)
+        resp_record = {
+            'status': response.status_code,
+            'headers': dict(response.headers),
+            'text': response.text,
+            'time_ms': dt_ms
+        }
+        _append_http_log({'request': req_record, 'response': resp_record})
         return {
             'success': True,
             'status_code': response.status_code,
@@ -122,6 +222,7 @@ def make_request(url, method='GET', headers=None, data=None, params=None, timeou
         }
     except Exception as e:
         logger.error(f"Request error: {e}")
+        _append_http_log({'request': req_record, 'response': {'status': 0, 'headers': {}, 'text': str(e), 'time_ms': 0}})
         return {
             'success': False,
             'error': str(e)

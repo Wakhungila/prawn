@@ -163,6 +163,59 @@
         </div>
     </div>
 </div>
+
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="card-title mb-0"><i class="fas fa-tools me-2"></i>Manual Mode & Exports</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Manual Mode</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="manual-mode-toggle">
+                            <label class="form-check-label" for="manual-mode-toggle">Route traffic through proxy</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="proxy-addr" class="form-label">Proxy Address</label>
+                        <input type="text" id="proxy-addr" class="form-control" placeholder="http://127.0.0.1:8080">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary w-100" id="apply-manual-mode"><i class="fas fa-toggle-on me-1"></i>Apply</button>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <button class="btn btn-outline-secondary me-2" id="proxy-browser-cmds"><i class="fas fa-globe me-1"></i>Proxy Browser</button>
+                        <button class="btn btn-outline-success me-2" id="download-har"><i class="fas fa-file-download me-1"></i>Download HAR</button>
+                        <button class="btn btn-outline-info" id="copy-curl"><i class="fas fa-terminal me-1"></i>Copy curl</button>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-danger" id="clear-http-log"><i class="fas fa-trash me-1"></i>Clear HTTP Log</button>
+                </div>
+                {% if BURP_API_ENABLED %}
+                <hr>
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label for="burp-url" class="form-label">Submit URL to Burp</label>
+                        <input type="text" id="burp-url" class="form-control" placeholder="https://target/endpoint">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-warning w-100" id="burp-submit"><i class="fas fa-paper-plane me-1"></i>Send to Burp</button>
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-warning w-100" id="burp-issues"><i class="fas fa-list me-1"></i>Fetch Issues</button>
+                    </div>
+                </div>
+                <pre class="mt-3 small" id="burp-issues-out" style="max-height:200px;overflow:auto;"></pre>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -421,5 +474,96 @@
             loadRecentScans();
         }, 10000);
     });
+</script>
+<script>
+(function(){
+    async function refreshManualMode() {
+        try {
+            const res = await fetch('/api/manual_mode');
+            const jr = await res.json();
+            if (!jr.success) return;
+            document.getElementById('manual-mode-toggle').checked = !!jr.enabled;
+            if (jr.addr) document.getElementById('proxy-addr').value = jr.addr;
+        } catch(e){}
+    }
+    async function applyManualMode() {
+        try {
+            const enabled = document.getElementById('manual-mode-toggle').checked;
+            const addr = document.getElementById('proxy-addr').value || 'http://127.0.0.1:8080';
+            const res = await fetch('/api/manual_mode', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({enabled, addr})});
+            const jr = await res.json();
+            alert(jr.success ? 'Manual mode updated' : ('Error: ' + (jr.error||'failed')));
+        } catch(e){ alert('Error updating manual mode'); }
+    }
+    async function downloadHAR() {
+        try {
+            const res = await fetch('/api/har');
+            const jr = await res.json();
+            if (!jr.success) { alert('Failed to export HAR'); return; }
+            const dataStr = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(jr.har, null, 2));
+            const a = document.createElement('a');
+            a.setAttribute('href', dataStr);
+            a.setAttribute('download', 'pin0cchi0.har.json');
+            document.body.appendChild(a); a.click(); a.remove();
+        } catch(e){ alert('Error exporting HAR'); }
+    }
+    async function copyCurl() {
+        try {
+            const res = await fetch('/api/curl');
+            const jr = await res.json();
+            if (!jr.success) { alert('No curl available'); return; }
+            await navigator.clipboard.writeText(jr.curl);
+            alert('Copied curl to clipboard');
+        } catch(e){ alert('Error copying curl'); }
+    }
+    async function showProxyCmds() {
+        try {
+            const res = await fetch('/api/proxy_browser_cmds');
+            const jr = await res.json();
+            if (!jr.success) { alert('Failed to load commands'); return; }
+            const cmds = jr.commands;
+            let msg = 'Proxy: ' + jr.proxy + '\n\n';
+            msg += 'Windows Chrome:\n' + cmds.windows.chrome + '\n\n';
+            msg += 'macOS Chrome:\n' + cmds.macos.chrome + '\n\n';
+            msg += 'Linux Chrome:\n' + cmds.linux.chrome + '\n\n';
+            msg += 'Firefox: ' + cmds.windows.firefox + '\n';
+            alert(msg);
+        } catch(e){ alert('Error loading proxy commands'); }
+    }
+    async function clearHttpLog() {
+        try {
+            const res = await fetch('/api/http_log/clear', {method: 'POST'});
+            const jr = await res.json();
+            alert(jr.success ? 'HTTP log cleared' : ('Error: ' + (jr.error||'failed')));
+        } catch(e){ alert('Error clearing HTTP log'); }
+    }
+    async function burpSubmit() {
+        try {
+            const url = document.getElementById('burp-url').value.trim();
+            if (!url) { alert('Enter a URL'); return; }
+            const res = await fetch('/api/burp/scan', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
+            const jr = await res.json();
+            alert(jr.success ? 'Submitted to Burp' : ('Error: ' + (jr.error||'failed')));
+        } catch(e){ alert('Error submitting to Burp'); }
+    }
+    async function burpIssues() {
+        try {
+            const out = document.getElementById('burp-issues-out'); if (out) out.textContent = 'Loading...';
+            const res = await fetch('/api/burp/issues');
+            const jr = await res.json();
+            if (out) out.textContent = JSON.stringify(jr, null, 2);
+        } catch(e){ alert('Error fetching Burp issues'); }
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+        const t = document.getElementById('manual-mode-toggle'); if (t) refreshManualMode();
+        const a = document.getElementById('apply-manual-mode'); if (a) a.addEventListener('click', applyManualMode);
+        const dh = document.getElementById('download-har'); if (dh) dh.addEventListener('click', downloadHAR);
+        const cc = document.getElementById('copy-curl'); if (cc) cc.addEventListener('click', copyCurl);
+        const pb = document.getElementById('proxy-browser-cmds'); if (pb) pb.addEventListener('click', showProxyCmds);
+        const cl = document.getElementById('clear-http-log'); if (cl) cl.addEventListener('click', clearHttpLog);
+        const bs = document.getElementById('burp-submit'); if (bs) bs.addEventListener('click', burpSubmit);
+        const bi = document.getElementById('burp-issues'); if (bi) bi.addEventListener('click', burpIssues);
+    });
+})();
 </script>
 {% endblock %}

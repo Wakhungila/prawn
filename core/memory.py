@@ -2,410 +2,460 @@
 # -*- coding: utf-8 -*-
 
 """
-Core Memory and Prioritization Layer for PIN0CCHI0
+Persistent agent memory and prioritization for PIN0CCHI0
 
-This module provides a persistent, thread-safe memory store and a simple
-prioritizer to enable an autonomous agent loop (perceive -> plan -> act -> learn).
+This module provides a SQLite-backed MemoryStore and a high-level AgentContext
+that the engine can use to:
+- Remember past scans per target (URLs/endpoints, parameters, tool results)
+- Track anomalies/failures and false positives
+- Maintain payload outcome statistics and WAF signatures
+- Prioritize what to test next (endpoints/modules) across runs
 
-It uses SQLite (stdlib) and avoids external dependencies.
-
-Schema overview:
-- scans:        scan metadata and config
-- targets:      discovered targets with depth, source, and visited flag
-- endpoints:    discovered endpoints with prioritization score and visited flag
-- parameters:   parameters discovered per endpoint
-- tech:         technology fingerprints per scan/target
-- findings:     deduplicated findings with severity, evidence, and module
-- artifacts:    paths to saved artifacts (html, screenshots, raw responses)
-- actions:      agent actions audit log (module, payload, success)
-- signatures:   de-duplication signatures for url+param+payload combos
-
-This layer is intended to be used by Engine in autonomous mode to persist state
-across actions, resume, and guide prioritization.
+Design principles:
+- Append-only journaling for evidence and failures
+- Keep structured fields in columns and flexible artifacts in JSON
+- Avoid per-run in-memory state duplication; prefer persisted state
+- Be resilient to schema evolutions via simple migrations
 """
 
+from __future__ import annotations
+
 import os
-import re
 import json
 import time
 import sqlite3
-import hashlib
 import threading
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Any, Dict, List, Optional, Tuple
 
-TS_FMT = '%Y-%m-%d %H:%M:%S'
+_DEFAULT_DB = os.path.join('memory', 'pin0cchi0.sqlite3')
+
+_SCHEMA = [
+    # Targets catalog
+    """
+    CREATE TABLE IF NOT EXISTS targets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target TEXT UNIQUE NOT NULL,
+        first_seen_ts REAL NOT NULL,
+        last_seen_ts REAL NOT NULL
+    );
+    """,
+    # Scans (per target)
+    """
+    CREATE TABLE IF NOT EXISTS scans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scan_id TEXT NOT NULL,
+        target_id INTEGER NOT NULL,
+        started_ts REAL NOT NULL,
+        ended_ts REAL,
+        config_json TEXT,
+        status TEXT,
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # Endpoints discovered/observed
+    """
+    CREATE TABLE IF NOT EXISTS endpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        url TEXT NOT NULL,
+        method TEXT,
+        params_json TEXT,
+        meta_json TEXT,
+        first_seen_ts REAL NOT NULL,
+        last_seen_ts REAL NOT NULL,
+        UNIQUE(target_id, url, method),
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # Module tests/findings evidence
+    """
+    CREATE TABLE IF NOT EXISTS findings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        scan_id TEXT,
+        module TEXT NOT NULL,
+        url TEXT,
+        params_json TEXT,
+        severity TEXT,
+        type TEXT,
+        title TEXT,
+        evidence_json TEXT,
+        timestamp REAL NOT NULL,
+        is_false_positive INTEGER DEFAULT 0,
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # Anomalies for prioritization (e.g., suspect responses)
+    """
+    CREATE TABLE IF NOT EXISTS anomalies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        scan_id TEXT,
+        url TEXT NOT NULL,
+        description TEXT,
+        score REAL DEFAULT 0,
+        meta_json TEXT,
+        timestamp REAL NOT NULL,
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # Failures/errors for active learning and triage
+    """
+    CREATE TABLE IF NOT EXISTS failures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        scan_id TEXT,
+        module TEXT NOT NULL,
+        url TEXT,
+        reason TEXT,
+        error_code TEXT,
+        raw_json TEXT,
+        timestamp REAL NOT NULL,
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # Payload statistics and WAF signature hints
+    """
+    CREATE TABLE IF NOT EXISTS payload_stats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        target_id INTEGER NOT NULL,
+        context TEXT,            -- e.g., sqli|xss|idor
+        payload_key TEXT NOT NULL,  -- key in library (hash/name)
+        waf_signature TEXT,       -- e.g., cloudflare|modsec|custom:403pattern
+        success_count INTEGER DEFAULT 0,
+        failure_count INTEGER DEFAULT 0,
+        blocked_count INTEGER DEFAULT 0,
+        avg_latency_ms REAL,
+        last_outcome TEXT,
+        last_ts REAL,
+        UNIQUE(target_id, context, payload_key, IFNULL(waf_signature, '')),
+        FOREIGN KEY (target_id) REFERENCES targets(id)
+    );
+    """,
+    # False positive notes to learn from reviewer decisions
+    """
+    CREATE TABLE IF NOT EXISTS false_positives (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        finding_id INTEGER NOT NULL,
+        reason TEXT,
+        timestamp REAL NOT NULL,
+        FOREIGN KEY (finding_id) REFERENCES findings(id)
+    );
+    """,
+]
 
 class MemoryStore:
-    """SQLite-backed memory store for agent state and results."""
-
-    def __init__(self, db_path: str = 'memory.db'):
+    def __init__(self, db_path: str = _DEFAULT_DB):
         self.db_path = db_path
-        self._lock = threading.RLock()
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(db_path) or '.', exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        with self._lock:
-            self._init_schema()
+        self._init_schema()
 
-    def close(self):
-        with self._lock:
-            self._conn.close()
+    def _init_schema(self) -> None:
+        with self._conn:
+            cur = self._conn.cursor()
+            for stmt in _SCHEMA:
+                cur.execute(stmt)
 
-    def _init_schema(self):
-        cur = self._conn.cursor()
-        cur.executescript(
-            """
-            PRAGMA journal_mode=WAL;
+    # --- Helpers ---
+    def _now(self) -> float:
+        return time.time()
 
-            CREATE TABLE IF NOT EXISTS scans (
-                id TEXT PRIMARY KEY,
-                target TEXT,
-                start_time TEXT,
-                end_time TEXT,
-                config_json TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS targets (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                target TEXT,
-                depth INTEGER,
-                source TEXT,
-                first_seen TEXT,
-                last_seen TEXT,
-                visited INTEGER DEFAULT 0
-            );
-            CREATE INDEX IF NOT EXISTS idx_targets_scan ON targets(scan_id);
-            CREATE INDEX IF NOT EXISTS idx_targets_target ON targets(target);
-
-            CREATE TABLE IF NOT EXISTS endpoints (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                target TEXT,
-                url TEXT UNIQUE,
-                kind TEXT,
-                score REAL DEFAULT 0,
-                first_seen TEXT,
-                last_seen TEXT,
-                visited INTEGER DEFAULT 0
-            );
-            CREATE INDEX IF NOT EXISTS idx_endpoints_scan ON endpoints(scan_id);
-            CREATE INDEX IF NOT EXISTS idx_endpoints_target ON endpoints(target);
-            CREATE INDEX IF NOT EXISTS idx_endpoints_score ON endpoints(score DESC);
-
-            CREATE TABLE IF NOT EXISTS parameters (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                endpoint_id INTEGER,
-                name TEXT,
-                first_seen TEXT,
-                UNIQUE(endpoint_id, name)
-            );
-
-            CREATE TABLE IF NOT EXISTS tech (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                target TEXT,
-                name TEXT,
-                version TEXT,
-                first_seen TEXT
-            );
-            CREATE INDEX IF NOT EXISTS idx_tech_scan ON tech(scan_id);
-
-            CREATE TABLE IF NOT EXISTS findings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                target TEXT,
-                url TEXT,
-                type TEXT,
-                severity TEXT,
-                evidence TEXT,
-                module TEXT,
-                timestamp TEXT,
-                hash TEXT,
-                UNIQUE(hash)
-            );
-            CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_sev ON findings(severity);
-
-            CREATE TABLE IF NOT EXISTS artifacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                kind TEXT,
-                path TEXT,
-                metadata_json TEXT,
-                created_at TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS actions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                ts TEXT,
-                action TEXT,
-                module TEXT,
-                target TEXT,
-                url TEXT,
-                payload TEXT,
-                success INTEGER,
-                details TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS signatures (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id TEXT,
-                signature TEXT UNIQUE,
-                first_seen TEXT
-            );
-            """
-        )
-        self._conn.commit()
-
-    @staticmethod
-    def _now() -> str:
-        return datetime.now().strftime(TS_FMT)
-
-    # Scans
-    def new_scan(self, scan_id: str, target: str, config: Dict[str, Any]):
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO scans(id, target, start_time, config_json) VALUES(?,?,?,?)",
-                (scan_id, target, self._now(), json.dumps(config or {}))
-            )
-            self._conn.commit()
-
-    def end_scan(self, scan_id: str):
-        with self._lock:
-            self._conn.execute(
-                "UPDATE scans SET end_time=? WHERE id=?",
-                (self._now(), scan_id)
-            )
-            self._conn.commit()
-
-    # Targets and endpoints
-    def add_target(self, scan_id: str, target: str, depth: int = 0, source: str = "seed"):
-        with self._lock:
-            ts = self._now()
-            self._conn.execute(
-                "INSERT INTO targets(scan_id, target, depth, source, first_seen, last_seen, visited) VALUES(?,?,?,?,?,?,0)",
-                (scan_id, target, depth, source, ts, ts)
-            )
-            self._conn.commit()
-
-    def mark_target_visited(self, target: str):
-        with self._lock:
-            self._conn.execute(
-                "UPDATE targets SET visited=1, last_seen=? WHERE target=?",
-                (self._now(), target)
-            )
-            self._conn.commit()
-
-    def add_endpoint(self, scan_id: str, target: str, url: str, kind: str = 'url', score: float = 0.0):
-        with self._lock:
-            ts = self._now()
-            try:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO endpoints(scan_id, target, url, kind, score, first_seen, last_seen, visited) VALUES(?,?,?,?,?,?,?,0)",
-                    (scan_id, target, url, kind, float(score), ts, ts)
-                )
-                self._conn.execute(
-                    "UPDATE endpoints SET last_seen=?, score=MAX(score, ?) WHERE url=?",
-                    (ts, float(score), url)
-                )
-                self._conn.commit()
-            except Exception:
-                self._conn.rollback()
-
-    def mark_endpoint_visited(self, url: str):
-        with self._lock:
-            self._conn.execute(
-                "UPDATE endpoints SET visited=1, last_seen=? WHERE url=?",
-                (self._now(), url)
-            )
-            self._conn.commit()
-
-    def add_parameter(self, endpoint_url: str, name: str):
-        with self._lock:
-            ts = self._now()
-            cur = self._conn.execute("SELECT id FROM endpoints WHERE url=?", (endpoint_url,))
+    def _get_target_id(self, target: str) -> int:
+        t = target.strip()
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute("SELECT id FROM targets WHERE target=?", (t,))
             row = cur.fetchone()
-            if not row:
-                return
-            eid = row['id']
-            self._conn.execute(
-                "INSERT OR IGNORE INTO parameters(endpoint_id, name, first_seen) VALUES(?,?,?)",
-                (eid, name, ts)
+            if row:
+                cur.execute("UPDATE targets SET last_seen_ts=? WHERE id=?", (self._now(), row[0]))
+                return int(row[0])
+            cur.execute(
+                "INSERT INTO targets (target, first_seen_ts, last_seen_ts) VALUES (?, ?, ?)",
+                (t, self._now(), self._now())
             )
-            self._conn.commit()
+            return int(cur.lastrowid)
 
-    def add_tech(self, scan_id: str, target: str, name: str, version: Optional[str] = None):
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO tech(scan_id, target, name, version, first_seen) VALUES(?,?,?,?,?)",
-                (scan_id, target, name, version or '', self._now())
+    # --- Public API ---
+    def record_scan(self, target: str, scan_id: str, config: Optional[Dict[str, Any]] = None, status: str = 'started') -> int:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                "INSERT INTO scans (scan_id, target_id, started_ts, config_json, status) VALUES (?, ?, ?, ?, ?)",
+                (scan_id, tid, self._now(), json.dumps(config or {}, ensure_ascii=False), status)
             )
-            self._conn.commit()
+            return int(cur.lastrowid)
 
-    # Findings and artifacts
-    @staticmethod
-    def _finding_hash(scan_id: str, target: str, url: str, ftype: str, evidence: str) -> str:
-        h = hashlib.sha256()
-        h.update((scan_id or '').encode())
-        h.update((target or '').encode())
-        h.update((url or '').encode())
-        h.update((ftype or '').encode())
-        h.update((evidence or '').encode())
-        return h.hexdigest()
+    def end_scan(self, target: str, scan_id: str, status: str = 'completed') -> None:
+        tid = self._get_target_id(target)
+        with self._conn:
+            self._conn.execute(
+                "UPDATE scans SET ended_ts=?, status=? WHERE target_id=? AND scan_id=?",
+                (self._now(), status, tid, scan_id)
+            )
 
-    def add_finding(self, scan_id: str, target: str, url: str, ftype: str, severity: str, evidence: str, module: str) -> bool:
-        """Insert a finding if not duplicate; return True if inserted."""
-        with self._lock:
-            fhash = self._finding_hash(scan_id, target, url, ftype, evidence)
-            try:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO findings(scan_id, target, url, type, severity, evidence, module, timestamp, hash) VALUES(?,?,?,?,?,?,?,?,?)",
-                    (scan_id, target, url, ftype, severity, evidence, module, self._now(), fhash)
+    def add_endpoint(self, target: str, url: str, method: str = 'GET', params: Optional[Dict[str, Any]] = None, meta: Optional[Dict[str, Any]] = None) -> None:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                "SELECT id FROM endpoints WHERE target_id=? AND url=? AND IFNULL(method,'')=IFNULL(?, '')",
+                (tid, url, method)
+            )
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    "UPDATE endpoints SET params_json=?, meta_json=?, last_seen_ts=? WHERE id=?",
+                    (json.dumps(params or {}), json.dumps(meta or {}), self._now(), int(row[0]))
                 )
-                self._conn.commit()
-                cur = self._conn.execute("SELECT changes() AS c")
-                return bool(cur.fetchone()['c'])
-            except Exception:
-                self._conn.rollback()
-                return False
-
-    def add_artifact(self, scan_id: str, kind: str, path: str, metadata: Optional[Dict[str, Any]] = None):
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO artifacts(scan_id, kind, path, metadata_json, created_at) VALUES(?,?,?,?,?)",
-                (scan_id, kind, path, json.dumps(metadata or {}), self._now())
-            )
-            self._conn.commit()
-
-    # Actions and signatures (for de-dup and audit)
-    def record_action(self, scan_id: str, action: str, module: str, target: str, url: str, payload: Optional[str], success: bool, details: str = ""):
-        with self._lock:
-            self._conn.execute(
-                "INSERT INTO actions(scan_id, ts, action, module, target, url, payload, success, details) VALUES(?,?,?,?,?,?,?,?,?)",
-                (scan_id, self._now(), action, module, target, url, payload or '', 1 if success else 0, details)
-            )
-            self._conn.commit()
-
-    @staticmethod
-    def make_signature(url: str, param: Optional[str] = None, payload: Optional[str] = None) -> str:
-        h = hashlib.sha256()
-        h.update((url or '').encode())
-        h.update((param or '').encode())
-        h.update((payload or '').encode())
-        return h.hexdigest()
-
-    def signature_seen(self, scan_id: str, signature: str) -> bool:
-        with self._lock:
-            cur = self._conn.execute("SELECT 1 FROM signatures WHERE signature=?", (signature,))
-            return cur.fetchone() is not None
-
-    def remember_signature(self, scan_id: str, signature: str):
-        with self._lock:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO signatures(scan_id, signature, first_seen) VALUES(?,?,?)",
-                (scan_id, signature, self._now())
-            )
-            self._conn.commit()
-
-    # Prioritization
-    @staticmethod
-    def _score_endpoint(url: str, kind: str = 'url') -> float:
-        """Heuristic scoring for endpoint priority."""
-        score = 0.0
-        u = url.lower()
-        # API endpoints
-        if '/api/' in u or u.endswith('/api'):
-            score += 2.5
-        # GraphQL
-        if '/graphql' in u:
-            score += 2.0
-        # Auth/admin
-        if any(k in u for k in ['/admin', '/signin', '/login', '/auth', '/dashboard']):
-            score += 2.0
-        # Parameterized
-        if '?' in u:
-            score += 1.5
-        # Sensitive names
-        if any(k in u for k in ['token', 'secret', 'key', 'redirect', 'file=', 'path=']):
-            score += 1.5
-        # Depth bonus up to a point
-        depth = u.count('/')
-        score += min(depth * 0.05, 0.5)
-        # Kinds
-        if kind and kind != 'url':
-            score += 0.2
-        return score
-
-    def queue_endpoint(self, scan_id: str, target: str, url: str, kind: str = 'url'):
-        score = self._score_endpoint(url, kind)
-        self.add_endpoint(scan_id, target, url, kind, score)
-
-    def next_endpoints(self, limit: int = 10) -> List[str]:
-        with self._lock:
-            cur = self._conn.execute(
-                "SELECT url FROM endpoints WHERE visited=0 ORDER BY score DESC, last_seen DESC LIMIT ?",
-                (limit,)
-            )
-            return [r['url'] for r in cur.fetchall()]
-
-    def all_findings(self, scan_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        with self._lock:
-            if scan_id:
-                cur = self._conn.execute("SELECT * FROM findings WHERE scan_id=? ORDER BY timestamp DESC", (scan_id,))
             else:
-                cur = self._conn.execute("SELECT * FROM findings ORDER BY timestamp DESC")
-            return [dict(r) for r in cur.fetchall()]
+                cur.execute(
+                    "INSERT INTO endpoints (target_id, url, method, params_json, meta_json, first_seen_ts, last_seen_ts) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (tid, url, method, json.dumps(params or {}), json.dumps(meta or {}), self._now(), self._now())
+                )
 
-    def get_scan_stats(self, scan_id: str) -> Dict[str, Any]:
-        with self._lock:
-            stats: Dict[str, Any] = {}
-            cur = self._conn.execute("SELECT COUNT(*) AS c FROM endpoints WHERE scan_id=?", (scan_id,))
-            stats['endpoints'] = cur.fetchone()['c']
-            cur = self._conn.execute("SELECT COUNT(*) AS c FROM findings WHERE scan_id=?", (scan_id,))
-            stats['findings'] = cur.fetchone()['c']
-            cur = self._conn.execute("SELECT COUNT(*) AS c FROM actions WHERE scan_id=?", (scan_id,))
-            stats['actions'] = cur.fetchone()['c']
-            return stats
+    def record_finding(self, target: str, scan_id: str, module: str, url: Optional[str], params: Optional[Dict[str, Any]], severity: str, ftype: str, title: str, evidence: Optional[Dict[str, Any]]) -> int:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO findings (target_id, scan_id, module, url, params_json, severity, type, title, evidence_json, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (tid, scan_id, module, url, json.dumps(params or {}), severity, ftype, title, json.dumps(evidence or {}), self._now())
+            )
+            return int(cur.lastrowid)
 
-# Optional convenience API for Engine
-class AgentContext:
-    """A light wrapper combining MemoryStore with convenience methods for the agent."""
-    def __init__(self, memory: MemoryStore, scan_id: str, target: str, config: Optional[Dict[str, Any]] = None):
-        self.mem = memory
-        self.scan_id = scan_id
-        self.target = target
-        self.mem.new_scan(scan_id, target, config or {})
+    def mark_false_positive(self, finding_id: int, reason: str) -> None:
+        with self._conn:
+            self._conn.execute("UPDATE findings SET is_false_positive=1 WHERE id=?", (finding_id,))
+            self._conn.execute(
+                "INSERT INTO false_positives (finding_id, reason, timestamp) VALUES (?, ?, ?)",
+                (finding_id, reason, self._now())
+            )
 
-    def add_discovered_urls(self, urls: List[str], kind: str = 'url'):
-        for u in urls or []:
-            try:
-                self.mem.queue_endpoint(self.scan_id, self.target, u, kind)
-            except Exception:
-                continue
+    def record_anomaly(self, target: str, scan_id: str, url: str, description: str, score: float = 0.5, meta: Optional[Dict[str, Any]] = None) -> int:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                "INSERT INTO anomalies (target_id, scan_id, url, description, score, meta_json, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (tid, scan_id, url, description, score, json.dumps(meta or {}), self._now())
+            )
+            return int(cur.lastrowid)
 
-    def record_finding(self, finding: Dict[str, Any], module: str):
-        self.mem.add_finding(
-            scan_id=self.scan_id,
-            target=finding.get('target', self.target),
-            url=finding.get('url', ''),
-            ftype=finding.get('type', 'Unknown'),
-            severity=finding.get('severity', 'Info'),
-            evidence=finding.get('evidence', ''),
-            module=module,
+    def record_failure(self, target: str, scan_id: str, module: str, url: Optional[str], reason: str, error_code: Optional[str] = None, raw: Optional[Dict[str, Any]] = None) -> int:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                "INSERT INTO failures (target_id, scan_id, module, url, reason, error_code, raw_json, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (tid, scan_id, module, url, reason, error_code, json.dumps(raw or {}), self._now())
+            )
+            return int(cur.lastrowid)
+
+    def record_payload_outcome(self, target: str, context: str, payload_key: str, success: bool, waf_signature: Optional[str] = None, latency_ms: Optional[float] = None, last_outcome: Optional[str] = None) -> None:
+        tid = self._get_target_id(target)
+        with self._conn:
+            cur = self._conn.cursor()
+            cur.execute(
+                "SELECT id, success_count, failure_count, blocked_count FROM payload_stats WHERE target_id=? AND context=? AND payload_key=? AND IFNULL(waf_signature,'')=IFNULL(?, '')",
+                (tid, context, payload_key, waf_signature)
+            )
+            row = cur.fetchone()
+            if row:
+                sid = int(row[0])
+                succ = int(row[1]) + (1 if success else 0)
+                fail = int(row[2]) + (0 if success else 1)
+                blocked = int(row[3])
+                if (last_outcome or '').lower() == 'blocked':
+                    blocked += 1
+                cur.execute(
+                    "UPDATE payload_stats SET success_count=?, failure_count=?, blocked_count=?, avg_latency_ms=COALESCE((avg_latency_ms + ?)/2, ?), last_outcome=?, last_ts=? WHERE id=?",
+                    (succ, fail, blocked, latency_ms, latency_ms, last_outcome or ('success' if success else 'failure'), self._now(), sid)
+                )
+            else:
+                cur.execute(
+                    """
+                    INSERT INTO payload_stats (target_id, context, payload_key, waf_signature, success_count, failure_count, blocked_count, avg_latency_ms, last_outcome, last_ts)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (tid, context, payload_key, waf_signature, 1 if success else 0, 0 if success else 1, 1 if (last_outcome or '').lower()=='blocked' else 0, latency_ms, last_outcome or ('success' if success else 'failure'), self._now())
+                )
+
+    # --- Queries / Prioritization ---
+    def get_recent_scans(self, target: str, limit: int = 10) -> List[Dict[str, Any]]:
+        tid = self._get_target_id(target)
+        cur = self._conn.cursor()
+        cur.execute("SELECT scan_id, started_ts, ended_ts, status FROM scans WHERE target_id=? ORDER BY started_ts DESC LIMIT ?", (tid, limit))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_endpoints(self, target: str) -> List[Dict[str, Any]]:
+        tid = self._get_target_id(target)
+        cur = self._conn.cursor()
+        cur.execute("SELECT url, method, params_json, meta_json, first_seen_ts, last_seen_ts FROM endpoints WHERE target_id=? ORDER BY last_seen_ts DESC", (tid,))
+        out = []
+        for r in cur.fetchall():
+            out.append({
+                'url': r['url'],
+                'method': r['method'] or 'GET',
+                'params': json.loads(r['params_json'] or '{}'),
+                'meta': json.loads(r['meta_json'] or '{}'),
+                'first_seen_ts': r['first_seen_ts'],
+                'last_seen_ts': r['last_seen_ts'],
+            })
+        return out
+
+    def get_prioritized_queue(self, target: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """
+        Build a prioritized queue of endpoints to test next, ranking by:
+        - Anomaly score (higher first)
+        - Recency of anomalies and findings
+        - Lack of coverage (few tests recorded)
+        """
+        tid = self._get_target_id(target)
+        cur = self._conn.cursor()
+        # Aggregate by URL for anomalies
+        cur.execute(
+            """
+            SELECT a.url, MAX(a.score) AS max_score, MAX(a.timestamp) AS last_ts
+            FROM anomalies a
+            WHERE a.target_id=?
+            GROUP BY a.url
+            ORDER BY max_score DESC, last_ts DESC
+            LIMIT ?
+            """,
+            (tid, limit)
         )
+        pri_urls = {row['url']: {'score': row['max_score'], 'last_ts': row['last_ts']} for row in cur.fetchall()}
+        # Endpoints fallback if no anomalies
+        eps = self.get_endpoints(target)
+        # Coverage estimation per URL
+        cov = {}
+        cur.execute("SELECT url, COUNT(*) AS c FROM findings WHERE target_id=? GROUP BY url", (tid,))
+        for r in cur.fetchall():
+            cov[r['url']] = r['c']
+        # Build queue
+        items = []
+        for e in eps:
+            url = e['url']
+            score = pri_urls.get(url, {}).get('score', 0.0)
+            coverage = cov.get(url, 0)
+            items.append({
+                'url': url,
+                'method': e['method'],
+                'params': e['params'],
+                'score': score,
+                'coverage': coverage,
+                'priority': (score * 2.0) + (0 if coverage > 0 else 1.0)
+            })
+        items.sort(key=lambda x: (-x['priority'], -x['score'], x['coverage']))
+        return items[:limit]
 
-    def select_next(self, limit: int = 10) -> List[str]:
-        return self.mem.next_endpoints(limit)
+    def get_payload_candidates(self, target: str, context: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Return payload keys and stats ranked by success and low block rates."""
+        tid = self._get_target_id(target)
+        cur = self._conn.cursor()
+        cur.execute(
+            """
+            SELECT payload_key, waf_signature, success_count, failure_count, blocked_count, avg_latency_ms, last_outcome, last_ts
+            FROM payload_stats
+            WHERE target_id=? AND context=?
+            ORDER BY (success_count - failure_count - blocked_count) DESC, last_ts DESC
+            LIMIT ?
+            """,
+            (tid, context, limit)
+        )
+        out = []
+        for r in cur.fetchall():
+            out.append({
+                'payload_key': r['payload_key'],
+                'waf_signature': r['waf_signature'],
+                'success_count': r['success_count'],
+                'failure_count': r['failure_count'],
+                'blocked_count': r['blocked_count'],
+                'avg_latency_ms': r['avg_latency_ms'],
+                'last_outcome': r['last_outcome'],
+                'last_ts': r['last_ts'],
+            })
+        return out
 
-    def visited(self, url: str):
-        self.mem.mark_endpoint_visited(url)
+class AgentContext:
+    """High-level helper to drive planning and adaptive payload selection."""
+    def __init__(self, store: Optional[MemoryStore] = None):
+        self.store = store or MemoryStore()
 
-    def action(self, module: str, url: str, payload: Optional[str], success: bool, details: str = ""):
-        self.mem.record_action(self.scan_id, 'execute', module, self.target, url, payload, success, details)
+    def remember_endpoints(self, target: str, discovered: List[str]) -> None:
+        for u in discovered or []:
+            try:
+                self.store.add_endpoint(target, u, method='GET', params=None, meta={'source': 'crawler'})
+            except Exception:
+                pass
 
-    def finalize(self):
-        self.mem.end_scan(self.scan_id)
+    def record_findings_bulk(self, target: str, scan_id: str, findings: List[Dict[str, Any]]) -> None:
+        for f in findings or []:
+            try:
+                self.store.record_finding(
+                    target=target,
+                    scan_id=scan_id,
+                    module=f.get('module') or f.get('source') or 'unknown',
+                    url=f.get('url'),
+                    params=f.get('params'),
+                    severity=f.get('severity', 'Info'),
+                    ftype=f.get('type', 'Finding'),
+                    title=f.get('title', f.get('type', 'Finding')),
+                    evidence=f.get('evidence')
+                )
+            except Exception:
+                pass
+
+    def prioritize(self, target: str, limits: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        return self.store.get_prioritized_queue(target, limit=(limits or {}).get('limit', 50))
+
+    def note_failure(self, target: str, scan_id: str, module: str, url: Optional[str], reason: str, error_code: Optional[str] = None, raw: Optional[Dict[str, Any]] = None) -> None:
+        self.store.record_failure(target, scan_id, module, url, reason, error_code, raw)
+
+    def note_anomaly(self, target: str, scan_id: str, url: str, description: str, score: float = 0.5, meta: Optional[Dict[str, Any]] = None) -> None:
+        self.store.record_anomaly(target, scan_id, url, description, score, meta)
+
+    def choose_payloads(self, target: str, context: str, hints: Optional[Dict[str, Any]] = None, limit: int = 12) -> List[str]:
+        """
+        Return ordered payload keys (from library) based on prior success and WAF hints.
+        """
+        stats = self.store.get_payload_candidates(target, context, limit=limit)
+        keys = [s['payload_key'] for s in stats]
+        # If no historical stats, rely on an initial default ordering (to be provided by payload lib).
+        if not keys:
+            # Basic defaults per context
+            defaults = {
+                'sqli': ['sqli:boolean:or1eq1', 'sqli:comment:inline', 'sqli:time:mysql'],
+                'xss': ['xss:reflected:basic', 'xss:attr:onerror', 'xss:svg:onload'],
+                'idor': ['idor:numeric:inc', 'idor:numeric:dec'],
+            }
+            keys = defaults.get(context, [])
+        return keys[:limit]
+
+    def learn_payload_outcome(self, target: str, context: str, payload_key: str, success: bool, waf_signature: Optional[str] = None, latency_ms: Optional[float] = None, last_outcome: Optional[str] = None) -> None:
+        self.store.record_payload_outcome(target, context, payload_key, success, waf_signature, latency_ms, last_outcome)
+
+    def start_scan(self, target: str, scan_id: str, config: Optional[Dict[str, Any]] = None) -> None:
+        self.store.record_scan(target, scan_id, config, status='running')
+
+    def end_scan(self, target: str, scan_id: str, status: str = 'completed') -> None:
+        self.store.end_scan(target, scan_id, status)
+
+# Convenience singleton for modules that want a default memory layer without wiring
+_global_store: Optional[MemoryStore] = None
+_global_store_lock = threading.Lock()
+
+def get_global_store() -> MemoryStore:
+    global _global_store
+    if _global_store is None:
+        with _global_store_lock:
+            if _global_store is None:
+                _global_store = MemoryStore()
+    return _global_store

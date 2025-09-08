@@ -140,6 +140,9 @@
                                 <button class="btn btn-sm btn-outline-primary view-vuln-btn" data-vuln-id="{{ vuln.id }}">
                                     <i class="fas fa-eye"></i>
                                 </button>
+                                <button class="btn btn-sm btn-outline-info evidence-btn" data-url="{{ vuln.url }}" title="View Evidence">
+                                    <i class="fas fa-flask"></i>
+                                </button>
                                 <button class="btn btn-sm btn-outline-secondary verify-vuln-btn" data-vuln-id="{{ vuln.id }}">
                                     <i class="fas fa-check"></i>
                                 </button>
@@ -212,6 +215,32 @@
         </div>
     </div>
 </div>
+
+<!-- Evidence Modal -->
+<div class="modal fade" id="evidenceModal" tabindex="-1" aria-labelledby="evidenceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="evidenceModalLabel">Request/Response Evidence</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <h6>Request</h6>
+          <pre id="evidence-request" class="bg-dark text-light p-3 rounded" style="max-height: 250px; overflow:auto;"></pre>
+        </div>
+        <div>
+          <h6>Response</h6>
+          <pre id="evidence-response" class="bg-dark text-light p-3 rounded" style="max-height: 350px; overflow:auto;"></pre>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" id="copy-curl-evidence">Copy curl</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -283,6 +312,53 @@
                 });
         });
         
+        // Evidence viewer
+        document.querySelectorAll('.evidence-btn').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const url = this.getAttribute('data-url');
+                const modalEl = document.getElementById('evidenceModal');
+                const modal = new bootstrap.Modal(modalEl);
+                // reset content
+                document.getElementById('evidence-request').textContent = 'Loading...';
+                document.getElementById('evidence-response').textContent = '';
+                modal.show();
+                try {
+                    const res = await fetch(`/api/evidence?url=${encodeURIComponent(url)}`);
+                    const jr = await res.json();
+                    if (!jr.success) {
+                        document.getElementById('evidence-request').textContent = `Error: ${jr.error || 'Failed to load evidence'}`;
+                        return;
+                    }
+                    const entry = jr.entry || {};
+                    const req = entry.request || {};
+                    const resp = entry.response || {};
+                    const reqText = [
+                        `${req.method || 'GET'} ${req.url || ''}`,
+                        ...Object.entries(req.headers || {}).map(([k,v]) => `${k}: ${v}`),
+                        '',
+                        (req.data || '')
+                    ].join('\n');
+                    const respText = [
+                        `Status: ${resp.status || ''}  Time: ${resp.time_ms || 0} ms`,
+                        ...Object.entries(resp.headers || {}).map(([k,v]) => `${k}: ${v}`),
+                        '',
+                        (resp.text || '').slice(0, 100000)
+                    ].join('\n');
+                    document.getElementById('evidence-request').textContent = reqText;
+                    document.getElementById('evidence-response').textContent = respText;
+                    const curlBtn = document.getElementById('copy-curl-evidence');
+                    curlBtn.setAttribute('data-curl', jr.curl || '');
+                } catch (e) {
+                    document.getElementById('evidence-request').textContent = 'Error loading evidence';
+                }
+            });
+        });
+        document.getElementById('copy-curl-evidence')?.addEventListener('click', async function() {
+            const curl = this.getAttribute('data-curl') || '';
+            if (!curl) { alert('No curl available'); return; }
+            try { await navigator.clipboard.writeText(curl); alert('Copied curl to clipboard'); } catch(e){ alert('Copy failed'); }
+        });
+
         // View vulnerability details
         document.querySelectorAll('.view-vuln-btn').forEach(btn => {
             btn.addEventListener('click', function() {

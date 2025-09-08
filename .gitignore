@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.build/
+.dist/
+
+env/
+venv/
+.venv/
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs and results
+logs/
+results/
+output/
+*.log
+
+# Cache / temp
+*.cache/
+.cache/
+.tmp/
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tooling
+coverage/
+htmlcov/
+pytest_cache/
+
+# Node/npm for UI assets if any
+node_modules/
+
+# HAR and evidence dumps
+*.har
+*.har.json
+
+# Local SQLite memory DB
+memory/*.sqlite3
+memory/*.db
+
+# Ignore any local config overrides
+config/local*.yaml

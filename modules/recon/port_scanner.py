@@ -115,7 +115,7 @@ class PortScannerModule(ReconModule):
         logger.info(f"Running nmap on {target} (ports: {ports})")
         
         xml_output = os.path.join(output_dir, 'nmap_results.xml')
-        cmd = f"nmap -sV -sC -p {ports} -oX {xml_output} {target}"
+        cmd = f"nmap -sV -sC -p {ports} -oX {xml_output} {target}" # type: ignore
         
         result = run_command(cmd)
         
@@ -159,7 +159,7 @@ class PortScannerModule(ReconModule):
         logger.info(f"Running masscan on {target} (ports: {ports})")
         
         json_output = os.path.join(output_dir, 'masscan_results.json')
-        cmd = f"masscan -p {ports} --rate=1000 -oJ {json_output} {target}"
+        cmd = f"masscan -p {ports} --rate=1000 -oJ {json_output} {target}" # type: ignore
         
         result = run_command(cmd)
         

@@ -22,7 +22,9 @@ PRAWN utilizes a hybrid Rust/Python architecture for elite performance:
 
 ```bash
 # Clone and Install
-git clone https://github.com/Wakhungila/PRAWN.git && cd PRAWN
+git clone https://github.com/Wakhungila/PRAWN.git
+cd PRAWN
+python -m venv venv && source venv/bin/activate  # Recommended safety step
 pip install -r requirements.txt
 
 # Build the Rust Core

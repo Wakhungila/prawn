@@ -20,7 +20,7 @@ from html import escape
 from core.base_module import VulnTestingModule
 from core.utils import make_request, run_command, ensure_dir_exists
 from core.payloads import generate_payloads
-from core.memory import AgentContext
+from core.memory import AgentMemory
 
 # Configure logger
 logger = logging.getLogger('pin0cchi0.vuln_testing.xss_scanner')
@@ -48,7 +48,7 @@ class XSSScanner(VulnTestingModule):
         self.confirmed_vulnerabilities = []
         # Persistent learning context
         try:
-            self.ctx = AgentContext()
+            self.ctx = AgentMemory()
         except Exception:
             self.ctx = None
         
@@ -204,7 +204,7 @@ class XSSScanner(VulnTestingModule):
             return endpoints
         
         html = response['text']
-        
+
         # Find all links with query parameters
         link_pattern = re.compile(r'href=["\']([^"\'>]*\?[^"\'>]*)["\']', re.IGNORECASE)
         links = link_pattern.findall(html)
@@ -356,7 +356,7 @@ class XSSScanner(VulnTestingModule):
                 continue
             
             # Check if payload is reflected in the response
-            if self._is_xss_payload_reflected(payload, response['text']):
+            if self._is_xss_payload_reflected(payload, response.get('text', '')):
                 vuln = {
                     'name': "Reflected Cross-Site Scripting (XSS)",
                     'severity': "high",
@@ -390,7 +390,7 @@ class XSSScanner(VulnTestingModule):
                 continue
             
             # Check if payload is reflected in the response
-            if self._is_xss_payload_reflected(payload, response['text']):
+            if self._is_xss_payload_reflected(payload, response.get('text', '')):
                 vuln = {
                     'name': "Reflected Cross-Site Scripting (XSS) in POST parameter",
                     'severity': "high",
@@ -453,7 +453,7 @@ class XSSScanner(VulnTestingModule):
                     continue
                 
                 if self._is_xss_payload_reflected(payload, response['text']):
-                    vuln = {
+                    vuln = { # type: ignore
                         'name': "Potential DOM-based Cross-Site Scripting (XSS)",
                         'severity': "high",
                         'description': "A potential DOM-based XSS vulnerability was found, which could allow attackers to execute arbitrary JavaScript in users' browsers.",
@@ -527,7 +527,7 @@ class XSSScanner(VulnTestingModule):
                         continue
                     
                     # Check if the payload is in the response
-                    if self._is_xss_payload_reflected(payload, check_response['text']):
+                    if self._is_xss_payload_reflected(payload, check_response.get('text', '')):
                         vuln = {
                             'name': "Potential Stored Cross-Site Scripting (XSS)",
                             'severity': "high",
@@ -560,7 +560,7 @@ class XSSScanner(VulnTestingModule):
                     continue
                 
                 # Check if the payload is reflected in the response
-                if self._is_xss_payload_reflected(payload, response['text']):
+                if self._is_xss_payload_reflected(payload, response.get('text', '')):
                     vuln = {
                         'name': f"Reflected XSS in {header} header",
                         'severity': "high",

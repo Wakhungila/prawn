@@ -33,10 +33,11 @@ class SenatorAgent:
         
         strategic_summary = "Audit finalized."
         if report_data:
+            report_data.findings = judge_output.findings
             strategic_summary = report_data.summary
             
-            # 2. Produce professional Markdown report
-            report_md = self.generate_markdown_report(report_data, test_results)
+            # 2. Produce professional Markdown report with verification results
+            report_md = self.generate_markdown_report(report_data, test_results=test_results)
             self._save_report(report_md)
             
         return AgentOutput(
@@ -106,13 +107,13 @@ class SenatorAgent:
         Produce a JSON object conforming to the 'Report' schema:
         - target: The target domain or contract.
         - summary: High-level executive overview of the security posture.
-        - root_cause: Specific function/logic violation.
-        - attack_scenario: Step-by-step extraction flow.
+        - root_cause: Specific function/logic violation (Plain string).
+        - attack_scenario: Step-by-step extraction flow (List of plain strings).
         - funds_at_risk: Conservative vs Aggressive TVL impact.
-        - strategic_roadmap: A list of 3-5 prioritized security improvements.
+        - strategic_roadmap: A list of 3-5 prioritized security improvements (List of plain strings).
         """
 
-    def generate_markdown_report(self, report: Report) -> str:
+    def generate_markdown_report(self, report: Report, test_results: Optional[Dict] = None) -> str:
         """Formats the report data into a professional Markdown document."""
         lines = [
             f"# PRAWN 🦐 Security Audit Report",

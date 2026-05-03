@@ -130,7 +130,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info("Analyzing HTTP headers for security issues")
         
         # Check for missing security headers
-        security_headers = {
+        security_headers: Dict[str, Dict[str, str]] = {
             'Strict-Transport-Security': {
                 'missing': "Missing HTTP Strict Transport Security (HSTS) header",
                 'severity': "medium",
@@ -176,7 +176,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         # Convert headers to lowercase for case-insensitive comparison
         headers_lower = {k.lower(): v for k, v in headers.items()}
         
-        for header, info in security_headers.items():
+        for header, info in security_headers.items(): # type: ignore
             if header.lower() not in headers_lower:
                 vuln = {
                     'name': info['missing'],
@@ -192,7 +192,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         
         # Check for insecure cookie attributes
         if 'set-cookie' in headers_lower:
-            cookies = headers_lower['set-cookie']
+            cookies = headers_lower['set-cookie'] # type: ignore
             if 'httponly' not in cookies.lower():
                 vuln = {
                     'name': "Cookie without HttpOnly flag",
@@ -240,7 +240,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info("Analyzing cookies for security issues")
         
         # Check for cookies in headers
-        if 'set-cookie' not in {k.lower(): v for k, v in headers.items()}:
+        if 'set-cookie' not in {k.lower(): v for k, v in headers.items()}: # type: ignore
             return
         
         cookies = headers.get('Set-Cookie') or headers.get('set-cookie')
@@ -266,7 +266,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info("Analyzing HTML content for security issues")
         
         # Check for forms without CSRF protection
-        form_pattern = re.compile(r'<form[^>]*>.*?</form>', re.DOTALL | re.IGNORECASE)
+        form_pattern = re.compile(r'<form[^>]*>.*?</form>', re.DOTALL | re.IGNORECASE) # type: ignore
         csrf_pattern = re.compile(r'csrf|token|nonce', re.IGNORECASE)
         
         forms = form_pattern.findall(html)
@@ -286,7 +286,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         
         # Check for mixed content
         if target.startswith('https'):
-            mixed_content_pattern = re.compile(r'src=["\']http://[^"\'>]*["\']', re.IGNORECASE)
+            mixed_content_pattern = re.compile(r'src=["\']http://[^"\'>]*["\']', re.IGNORECASE) # type: ignore
             mixed_content = mixed_content_pattern.findall(html)
             
             if mixed_content:
@@ -341,7 +341,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info(f"Discovering endpoints on {target}")
         
         # Get the main page
-        response = make_request(target)
+        response = make_request(target) # type: ignore
         
         if not response['success']:
             logger.warning(f"Failed to retrieve main page for endpoint discovery: {response.get('error', 'Unknown error')}")
@@ -404,7 +404,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info(f"Testing for XSS on {url}")
         
         # XSS test payloads
-        xss_payloads = [
+        xss_payloads: List[str] = [
             '<script>alert(1)</script>',
             '"><script>alert(1)</script>',
             '\'"><script>alert(1)</script>',
@@ -511,7 +511,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info(f"Testing for SQL Injection on {url}")
         
         # SQL Injection test payloads
-        sqli_payloads = [
+        sqli_payloads: List[str] = [
             "' OR '1'='1",
             "\" OR \"1\"=\"1",
             "1' OR '1'='1' --",
@@ -525,7 +525,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         ]
         
         # Error patterns that might indicate SQL Injection
-        error_patterns = [
+        error_patterns: List[str] = [
             "SQL syntax",
             "mysql_fetch",
             "ORA-",
@@ -610,7 +610,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info(f"Testing for Local File Inclusion on {url}")
         
         # LFI test payloads
-        lfi_payloads = [
+        lfi_payloads: List[str] = [
             "../../../../../../../etc/passwd",
             "..\\..\\..\\..\\..\\..\\..\\windows\\win.ini",
             "../../../../../../../etc/passwd%00",
@@ -622,7 +622,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         ]
         
         # Patterns that might indicate successful LFI
-        lfi_patterns = [
+        lfi_patterns: List[str] = [
             "root:x:",  # Linux /etc/passwd
             "\[extensions\]",  # Windows win.ini
             "for 16-bit app support",  # Windows win.ini
@@ -678,7 +678,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         logger.info(f"Testing for Remote Code Execution on {url}")
         
         # RCE test payloads (non-destructive)
-        rce_payloads = [
+        rce_payloads: List[str] = [
             ";id",
             "|id",
             "`id`",
@@ -694,7 +694,7 @@ class WebVulnerabilityScanner(VulnTestingModule):
         ]
         
         # Patterns that might indicate successful RCE
-        rce_patterns = [
+        rce_patterns: List[str] = [
             "uid=",  # Output of id command
             "gid=",  # Output of id command
             "PIN0CCHI0_RCE_TEST"  # Our test string

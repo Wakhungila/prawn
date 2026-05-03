@@ -104,7 +104,7 @@ class SubdomainEnumModule(ReconModule):
         logger.info(f"Running subfinder on {domain}")
         
         output_file = os.path.join(output_dir, 'subfinder_results.txt')
-        cmd = f"subfinder -d {domain} -o {output_file}"
+        cmd = f"subfinder -d {domain} -o {output_file}" # type: ignore
         
         result = run_command(cmd)
         
@@ -131,7 +131,7 @@ class SubdomainEnumModule(ReconModule):
         logger.info(f"Running amass on {domain}")
         
         output_file = os.path.join(output_dir, 'amass_results.txt')
-        cmd = f"amass enum -d {domain} -o {output_file}"
+        cmd = f"amass enum -d {domain} -o {output_file}" # type: ignore
         
         result = run_command(cmd, timeout=300)  # Amass can take a while
         
@@ -158,7 +158,7 @@ class SubdomainEnumModule(ReconModule):
         logger.info(f"Running assetfinder on {domain}")
         
         output_file = os.path.join(output_dir, 'assetfinder_results.txt')
-        cmd = f"assetfinder {domain} > {output_file}"
+        cmd = f"assetfinder {domain} > {output_file}" # type: ignore
         
         result = run_command(cmd)
         

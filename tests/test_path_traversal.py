@@ -89,6 +89,7 @@ class TestPathTraversalScanner(unittest.TestCase):
         # Mock response with path traversal vulnerability
         mock_response = MagicMock()
         mock_response.text = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin"
+        mock_response.text = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin" # type: ignore
         mock_response.status_code = 200
         mock_response.headers = {'Content-Type': 'text/plain'}
         mock_make_request.return_value = mock_response
@@ -114,6 +115,7 @@ class TestPathTraversalScanner(unittest.TestCase):
         """Test that no vulnerability is reported when path traversal is not present."""
         # Mock response without path traversal vulnerability
         mock_response = MagicMock()
+        mock_response = MagicMock() # type: ignore
         mock_response.text = "<html><body>Normal page content</body></html>"
         mock_response.status_code = 200
         mock_response.headers = {'Content-Type': 'text/html'}
@@ -134,6 +136,7 @@ class TestPathTraversalScanner(unittest.TestCase):
         """Test handling of error responses."""
         # Mock error response
         mock_response = MagicMock()
+        mock_response = MagicMock() # type: ignore
         mock_response.status_code = 500
         mock_make_request.return_value = mock_response
         
@@ -179,6 +182,7 @@ class TestPathTraversalScanner(unittest.TestCase):
         with patch('modules.vuln_testing.path_traversal.make_request') as mock_make_request:
             # Mock initial response
             mock_response = MagicMock()
+            mock_response = MagicMock() # type: ignore
             mock_response.text = "<html><body>Test page</body></html>"
             mock_response.status_code = 200
             mock_response.headers = {'Content-Type': 'text/html'}
@@ -202,6 +206,7 @@ class TestPathTraversalScanner(unittest.TestCase):
         # Mock response with path traversal vulnerability
         mock_response = MagicMock()
         mock_response.text = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin"
+        mock_response.text = "root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin" # type: ignore
         mock_response.status_code = 200
         mock_response.headers = {'Content-Type': 'text/plain'}
         mock_make_request.return_value = mock_response

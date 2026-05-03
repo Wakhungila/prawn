@@ -42,7 +42,6 @@ class ResearcherAgent:
 
         logger.info("🧪 Researcher initiating 0-day hypothesis generation...")
         # Shift focus from code-path to economic-path
-        hypotheses = await self.researcher.analyze_economic_attack_surface(judge_output)
         hypotheses = await self.researcher.analyze_correlations(judge_output)
         # Economic Verification Phase
         if self.config.economic_threat_model:
@@ -117,7 +116,10 @@ class ResearcherAgent:
                 if match:
                     bytecode = match.group(0)
                     try:
-                        collisions = prawn_core.detect_storage_collisions_native(bytecode)
+                        # Identify slots in the implementation and check against common Proxy admin slots (like EIP-1967)
+                        impl_slots = [int(s, 16) for s in re.findall(r'60([a-fA-F0-9]{2})55', bytecode)]
+                        proxy_admin_slots = [0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103] # EIP-1967 Admin Slot
+                        collisions = prawn_core.detect_storage_collisions_native(proxy_admin_slots, impl_slots)
                         if collisions:
                             boundaries.append(ResearchHypothesis(
                                 title="Proxy/Implementation Storage Collision",

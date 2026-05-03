@@ -5,11 +5,15 @@ Location: prawn/agents/judge.py
 """
 import logging
 import json
+import re
 from typing import Optional
 from core.schemas import Finding, Anomaly, AgentOutput, ScanConfig
+from core.utils import make_request # Import make_request for active probing
 from core.ollama_client import OllamaClient
 
-try:
+logger = logging.getLogger("PRAWN.Judge")
+
+try: # Python string manipulation instead of Rust syntax
     import prawn_core
 except ImportError:
     prawn_core = None
@@ -66,8 +70,47 @@ class JudgeAgent:
             
             Evaluate the service methods. If you identify sensitive administrative, internal, or debug methods, 
             generate a 'Finding' with 'HIGH' severity. If methods appear safe (e.g., standard health checks), return 'null'.
-            Output only JSON matching the 'Finding' schema.
+            Output ONLY the raw JSON fields matching the 'Finding' schema. Do not wrap the result in a parent 'Finding' key.
             """
+            
+            # Active verification using payload examples
+            payload_examples = anomaly.metadata.get("payload_examples", {})
+            if payload_examples:
+                logger.info(f"Judge: Actively verifying gRPC methods for {anomaly.target} using generated payloads.")
+                active_verification_results = []
+                for method, example_payload in payload_examples.items():
+                    # Construct gRPC request for active verification
+                    # This is a heuristic; actual gRPC calls are complex and require protobuf definitions
+                    # For this context, we'll simulate a POST with JSON, assuming some gRPC gateways might accept it
+                    # or that the response indicates a valid interaction.
+                    
+                    # gRPC method names are typically in the format /Service.Name/MethodName
+                    # We need to extract ServiceName and MethodName from the full method string
+                    match = re.match(r'([a-zA-Z0-9._]+)\/([a-zA-Z0-9._]+)', method)
+                    if not match:
+                        continue # Skip if method name format is unexpected
+                    service_name, method_name = match.groups()
+
+                    # Construct a generic gRPC-like JSON request
+                    grpc_request_body = {
+                        "method": f"/{service_name}/{method_name}",
+                        "params": [example_payload] # Assuming params can be a list of objects
+                    }
+                    
+                    headers = {"Content-Type": "application/json"} # Some gRPC gateways accept JSON
+                    
+                    # Attempt to make the request
+                    resp = make_request(anomaly.target, method="POST", headers=headers, data=json.dumps(grpc_request_body), timeout=15)
+                    
+                    if resp.get("success") and resp.get("status_code") == 200:
+                        response_text = resp.get("text", "").lower()
+                        # Look for signs of successful execution or sensitive data
+                        if "error" not in response_text and "unimplemented" not in response_text and "unauthenticated" not in response_text:
+                            active_verification_results.append(f"Method '{method}' responded successfully. Response: {response_text[:100]}...")
+
+                if active_verification_results:
+                    prompt += "\n\nACTIVE VERIFICATION RESULTS:\n" + "\n".join(active_verification_results)
+                    prompt += "\nBased on these active verification results, confirm the severity and impact."
         else:
             prompt = f"""
             As an elite security auditor, validate this anomaly:
@@ -76,7 +119,7 @@ class JudgeAgent:
             Confidence: {anomaly.confidence}
             Suggested Vector: {anomaly.suggested_vector}
     
-            Output ONLY valid JSON matching the 'Finding' schema if this is a real vulnerability.
+            Output ONLY valid raw JSON matching the 'Finding' schema if this is a real vulnerability. Do not wrap the result in a parent key.
             If it is a false positive or low-value noise, return 'null'.
             """
 
@@ -84,9 +127,9 @@ class JudgeAgent:
         # Perform technical reachability verification for reentrancy anomalies via native CFG
         if ("reentrancy" in anomaly.observation.lower() or "0xf1" in anomaly.observation) and prawn_core:
             bytecode = anomaly.metadata.get("bytecode")
-            if bytecode:
-                try:
-                    code = bytecode.strip_prefix("0x").unwrap_or(&bytecode)
+            if bytecode and isinstance(bytecode, str):
+                try: # Python string manipulation instead of Rust syntax
+                    code = bytecode.replace("0x", "")
                     cfg_json = prawn_core.generate_evm_cfg(bytecode)
                     cfg = json.loads(cfg_json)
                     blocks = cfg.get("blocks", {})

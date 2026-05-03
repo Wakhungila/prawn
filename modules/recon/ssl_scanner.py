@@ -103,7 +103,7 @@ class SSLScannerModule(ReconModule):
         
         sslscan_output = os.path.join(output_dir, 'sslscan_output.xml')
         
-        cmd = ['sslscan', '--xml=' + sslscan_output, f"{target}:{port}"]
+        cmd = f"sslscan --xml={sslscan_output} {target}:{port}"
         result = run_command(cmd)
         
         if result['success'] and os.path.exists(sslscan_output):
@@ -159,7 +159,7 @@ class SSLScannerModule(ReconModule):
         
         sslyze_output = os.path.join(output_dir, 'sslyze_output.json')
         
-        cmd = ['sslyze', '--json_out=' + sslyze_output, f"{target}:{port}"]
+        cmd = f"sslyze --json_out={sslyze_output} {target}:{port}"
         result = run_command(cmd)
         
         if result['success'] and os.path.exists(sslyze_output):
@@ -230,7 +230,7 @@ class SSLScannerModule(ReconModule):
         
         testssl_output = os.path.join(output_dir, 'testssl_output.json')
         
-        cmd = ['testssl.sh', '--json', '--quiet', '--logfile', testssl_output, f"{target}:{port}"]
+        cmd = f"testssl.sh --json --quiet --logfile {testssl_output} {target}:{port}"
         result = run_command(cmd)
         
         if result['success'] and os.path.exists(testssl_output):

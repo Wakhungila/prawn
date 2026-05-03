@@ -147,16 +147,16 @@ class APIDiscoveryModule(ReconModule):
             url = urljoin(target, path)
             response = make_request(url)
             
-            if response['success'] and response['status_code'] < 400:
-                logger.info(f"Found API path: {url} (Status: {response['status_code']})")
+            if response.get('success') and response.get('status_code', 0) < 400:
+                logger.info(f"Found API path: {url} (Status: {response.get('status_code')})")
                 
                 # Add to API endpoints
                 endpoint_info = {
                     'url': url,
-                    'method': 'GET',
-                    'status_code': response['status_code'],
-                    'content_type': response['headers'].get('Content-Type', ''),
-                    'response_size': len(response['text']) if 'text' in response else 0,
+                    'method': 'GET', # type: ignore
+                    'status_code': response.get('status_code'),
+                    'content_type': response.get('headers', {}).get('Content-Type', ''),
+                    'response_size': len(response.get('text', '')) if response.get('text') else 0,
                     'discovery_method': 'Common Path Check'
                 }
                 
@@ -182,16 +182,16 @@ class APIDiscoveryModule(ReconModule):
             url = urljoin(target, path)
             response = make_request(url)
             
-            if response['success'] and response['status_code'] < 400:
-                logger.info(f"Found API documentation: {url} (Status: {response['status_code']})")
+            if response.get('success') and response.get('status_code', 0) < 400:
+                logger.info(f"Found API documentation: {url} (Status: {response.get('status_code')})")
                 
                 # Check if it's a Swagger/OpenAPI specification
                 is_swagger = False
-                content_type = response['headers'].get('Content-Type', '')
+                content_type = response.get('headers', {}).get('Content-Type', '')
                 
                 if 'application/json' in content_type:
                     try:
-                        data = json.loads(response['text'])
+                        data = json.loads(response.get('text', ''))
                         
                         # Check for OpenAPI/Swagger indicators
                         if 'swagger' in data or 'openapi' in data:
@@ -256,15 +256,15 @@ class APIDiscoveryModule(ReconModule):
             # Try GET request first
             response = make_request(url)
             
-            if response['success'] and response['status_code'] < 400:
-                logger.info(f"Found potential GraphQL endpoint (GET): {url} (Status: {response['status_code']})")
+            if response.get('success') and response.get('status_code', 0) < 400:
+                logger.info(f"Found potential GraphQL endpoint (GET): {url} (Status: {response.get('status_code')})")
                 
                 # Add to GraphQL endpoints
                 endpoint_info = {
                     'url': url,
                     'method': 'GET',
-                    'status_code': response['status_code'],
-                    'content_type': response['headers'].get('Content-Type', ''),
+                    'status_code': response.get('status_code'),
+                    'content_type': response.get('headers', {}).get('Content-Type', ''),
                     'discovery_method': 'Common Path Check'
                 }
                 
@@ -285,20 +285,20 @@ class APIDiscoveryModule(ReconModule):
             post_headers = {'Content-Type': 'application/json'}
             post_response = make_request(url, method='POST', headers=post_headers, data=json.dumps(introspection_query))
             
-            if post_response['success'] and post_response['status_code'] < 400:
+            if post_response.get('success') and post_response.get('status_code', 0) < 400:
                 try:
-                    data = json.loads(post_response['text'])
+                    data = json.loads(post_response.get('text', ''))
                     
                     # Check if it's a valid GraphQL response
                     if 'data' in data and '__schema' in data['data']:
-                        logger.info(f"Confirmed GraphQL endpoint (POST): {url} (Status: {post_response['status_code']})")
+                        logger.info(f"Confirmed GraphQL endpoint (POST): {url} (Status: {post_response.get('status_code')})")
                         
                         # Add to GraphQL endpoints if not already added
                         endpoint_info = {
                             'url': url,
                             'method': 'POST',
-                            'status_code': post_response['status_code'],
-                            'content_type': post_response['headers'].get('Content-Type', ''),
+                            'status_code': post_response.get('status_code'),
+                            'content_type': post_response.get('headers', {}).get('Content-Type', ''),
                             'schema_info': data['data']['__schema'],
                             'discovery_method': 'Introspection Query'
                         }
@@ -318,7 +318,7 @@ class APIDiscoveryModule(ReconModule):
         # First, get the main page
         response = make_request(target)
         
-        if not response['success']:
+        if not response.get('success'):
             logger.warning(f"Failed to retrieve main page for {target}: {response.get('error', 'Unknown error')}")
             return
         
@@ -366,7 +366,7 @@ class APIDiscoveryModule(ReconModule):
         for js_url in js_urls:
             js_response = make_request(js_url)
             
-            if not js_response['success']:
+            if not js_response.get('success'):
                 logger.debug(f"Failed to retrieve JavaScript file {js_url}: {js_response.get('error', 'Unknown error')}")
                 continue
             
@@ -503,7 +503,7 @@ class APIDiscoveryModule(ReconModule):
                         headers = {'Content-Type': 'application/json'}
                         response = make_request(url, method=method, headers=headers, data=json.dumps(payload))
                     
-                    if response['success'] and response['status_code'] < 400:
+                    if response.get('success') and response.get('status_code', 0) < 400:
                         logger.info(f"Found API endpoint through fuzzing: {method} {url} (Status: {response['status_code']})")
                         
                         # Add to API endpoints

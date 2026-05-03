@@ -49,6 +49,7 @@ class Anomaly(BaseModel):
     observation: str
     confidence: float = Field(ge=0.0, le=1.0)
     suggested_vector: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class ResearchHypothesis(BaseModel):
     title: str
@@ -77,3 +78,12 @@ class ScanConfig(BaseModel):
     ollama_model: str = "prawn-researcher"
     delta_audit: Optional[str] = None  # e.g. "v1.0.0..HEAD"
     economic_threat_model: bool = True
+
+class Report(BaseModel):
+    target: str
+    summary: str
+    root_cause: str
+    attack_scenario: List[str]
+    funds_at_risk: str
+    strategic_roadmap: List[str]
+    findings: List[Finding] = []

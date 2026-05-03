@@ -5,15 +5,14 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs, quote, urlencode
-from core.base_module import VulnerabilityTestingModule
-from core.utils import make_http_request, generate_random_string
+from core.base_module import VulnTestingModule
+from core.utils import make_http_request, generate_random_string # Removed unused make_http_request
 
-class OpenRedirectScanner(VulnerabilityTestingModule):
+class OpenRedirectScanner(VulnTestingModule):
     """Open Redirect vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "open_redirect_scanner"
+        super().__init__(name="open_redirect_scanner", description="Tests for Open Redirect vulnerabilities")
         self.description = "Tests for Open Redirect vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -75,7 +74,7 @@ class OpenRedirectScanner(VulnerabilityTestingModule):
         redirect_params = []
         try:
             # Common redirect parameter names
-            redirect_keywords = [
+            redirect_keywords: List[str] = [
                 'redirect', 'redir', 'next', 'url', 'target', 'dest', 'destination',
                 'return', 'return_url', 'return_to', 'goto', 'link', 'forward',
                 'forward_url', 'path', 'continue', 'window', 'to', 'out', 'view',
@@ -85,7 +84,7 @@ class OpenRedirectScanner(VulnerabilityTestingModule):
             soup = BeautifulSoup(response.text, 'html.parser')
 
             # Extract form inputs
-            for form in soup.find_all('form'):
+            for form in soup.find_all('form'): # type: ignore
                 form_action = urljoin(url, form.get('action', ''))
                 form_method = form.get('method', 'GET').upper()
 
@@ -219,7 +218,7 @@ class OpenRedirectScanner(VulnerabilityTestingModule):
             ]
 
             # Check inline scripts
-            for script in soup.find_all('script'):
+            for script in soup.find_all('script'): # type: ignore
                 script_content = script.string
                 if script_content:
                     for pattern in redirect_patterns:
@@ -237,7 +236,7 @@ class OpenRedirectScanner(VulnerabilityTestingModule):
                                 })
 
             # Check external JavaScript files
-            for script in soup.find_all('script', src=True):
+            for script in soup.find_all('script', src=True): # type: ignore
                 script_url = urljoin(url, script['src'])
                 if urlparse(script_url).netloc == urlparse(url).netloc:
                     script_response = make_http_request(script_url)

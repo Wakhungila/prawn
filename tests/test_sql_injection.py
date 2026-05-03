@@ -12,7 +12,7 @@ class TestSQLInjectionScanner(unittest.TestCase):
     
     def setUp(self):
         # Create the scanner with the mock configuration
-        self.scanner = SQLInjectionTester() # Corrected class name
+        self.scanner = SQLInjectionScanner() # Corrected class name
         self.scanner.config = {'output_dir': './test_results'} # Set config after init
         self.scanner.target = "http://example.com" # Set a default target for tests
         

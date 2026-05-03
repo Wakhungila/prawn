@@ -399,7 +399,7 @@ class CommandInjection(VulnTestingModule):
             
             # Send request with payload
             response = make_request(test_url)
-            
+
             if not response['success']:
                 continue
             
@@ -429,7 +429,7 @@ class CommandInjection(VulnTestingModule):
             # Send request with payload
             response = make_request(url, method='POST', data={param_name: payload})
             
-            if not response['success']:
+            if not response.get('success'):
                 continue
             
             # Check if command output is in the response
@@ -538,7 +538,7 @@ class CommandInjection(VulnTestingModule):
                 custom_headers = {header: payload}
                 response = make_request(target, headers=custom_headers)
                 
-                if not response['success']:
+                if not response.get('success'):
                     continue
                 
                 # Check if command output is in the response

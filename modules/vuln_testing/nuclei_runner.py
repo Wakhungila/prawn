@@ -78,7 +78,7 @@ class NucleiRunnerModule(VulnTestingModule):
         # Parse JSON output
         if os.path.exists(json_out):
             try:
-                with open(json_out, 'r') as f:
+                with open(json_out, 'r', encoding='utf-8') as f:
                     for line in f:
                         line = line.strip()
                         if not line:
@@ -104,7 +104,7 @@ class NucleiRunnerModule(VulnTestingModule):
         # Parse text output for the list run (best-effort)
         if os.path.exists(txt_out):
             try:
-                with open(txt_out, 'r') as f:
+                with open(txt_out, 'r', encoding='utf-8') as f:
                     for line in f:
                         # nuclei text line format varies; best-effort parse
                         s = line.strip()
@@ -138,7 +138,7 @@ class NucleiRunnerModule(VulnTestingModule):
         try:
             candidate = os.path.abspath(candidate)
             if os.path.exists(candidate):
-                with open(candidate, 'r') as f:
+                with open(candidate, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                 urls = data.get('discovered_urls', []) or []
                 if urls:

@@ -247,7 +247,7 @@ class SSRFScanner(VulnTestingModule):
             return endpoints
         
         html = response['text']
-        
+
         # Find all links with query parameters
         link_pattern = re.compile(r'href=["\']([^"\'>]*\?[^"\'>]*)["\']', re.IGNORECASE)
         links = link_pattern.findall(html)
@@ -727,7 +727,7 @@ class SSRFScanner(VulnTestingModule):
         # Check for specific patterns in the response
         for pattern in self.detection_patterns:
             if pattern.search(text):
-                indicators.append(f"Pattern match: {pattern.pattern}")
+                indicators.append(f"Pattern match: {pattern.pattern}") # type: ignore
         
         # Check for unusual status codes
         if status_code in [200, 201, 202] and 'http://127.0.0.1' in payload or 'http://localhost' in payload:

@@ -11,6 +11,7 @@ to automatically discover and test targets without manual intervention.
 import os
 import json
 import time
+import asyncio
 import logging
 import threading
 from urllib.parse import urlparse
@@ -18,6 +19,8 @@ from urllib.parse import urlparse
 from core.base_module import BaseModule
 from core.utils import make_request, run_command
 
+from core.engine import PrawnOrchestrator
+from core.schemas import ScanConfig as PrawnScanConfig
 # Configure logger
 logger = logging.getLogger('pin0cchi0.autonomous.scanner')
 

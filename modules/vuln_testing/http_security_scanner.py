@@ -7,12 +7,11 @@ from urllib.parse import urlparse
 from core.base_module import VulnTestingModule
 from core.utils import make_http_request
 
-class HTTPSecurityScanner(VulnerabilityTestingModule):
+class HTTPSecurityScanner(VulnTestingModule):
     """HTTP Security Headers and Misconfiguration scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "http_security_scanner"
+        super().__init__(name="http_security_scanner", description="Tests for missing or misconfigured HTTP security headers")
         self.description = "Tests for missing or misconfigured HTTP security headers"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -33,10 +32,10 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             List of dictionaries containing vulnerability details
         """
         findings = []
-        headers = response.headers
+        headers = response.get('headers', {})
 
         # Content Security Policy
-        if 'Content-Security-Policy' not in headers:
+        if 'Content-Security-Policy' not in headers and 'content-security-policy' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "Content-Security-Policy",
@@ -45,7 +44,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
                 "mitigation": "Implement a strong Content Security Policy to prevent XSS and other injection attacks"
             })
         else:
-            csp = headers['Content-Security-Policy']
+            csp = headers.get('Content-Security-Policy', headers.get('content-security-policy', ''))
             if "'unsafe-inline'" in csp or "'unsafe-eval'" in csp:
                 findings.append({
                     "type": "Weak Security Header",
@@ -56,7 +55,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
                 })
 
         # X-Frame-Options
-        if 'X-Frame-Options' not in headers:
+        if 'X-Frame-Options' not in headers and 'x-frame-options' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "X-Frame-Options",
@@ -66,7 +65,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             })
 
         # X-Content-Type-Options
-        if 'X-Content-Type-Options' not in headers:
+        if 'X-Content-Type-Options' not in headers and 'x-content-type-options' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "X-Content-Type-Options",
@@ -76,7 +75,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             })
 
         # Strict-Transport-Security
-        if url.startswith('https://') and 'Strict-Transport-Security' not in headers:
+        if url.startswith('https://') and 'Strict-Transport-Security' not in headers and 'strict-transport-security' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "Strict-Transport-Security",
@@ -86,7 +85,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             })
 
         # X-XSS-Protection
-        if 'X-XSS-Protection' not in headers:
+        if 'X-XSS-Protection' not in headers and 'x-xss-protection' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "X-XSS-Protection",
@@ -96,7 +95,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             })
 
         # Referrer-Policy
-        if 'Referrer-Policy' not in headers:
+        if 'Referrer-Policy' not in headers and 'referrer-policy' not in headers:
             findings.append({
                 "type": "Missing Security Header",
                 "header": "Referrer-Policy",
@@ -106,7 +105,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             })
 
         # Permissions-Policy
-        if 'Permissions-Policy' not in headers and 'Feature-Policy' not in headers:
+        if ('Permissions-Policy' not in headers and 'permissions-policy' not in headers) and ('Feature-Policy' not in headers and 'feature-policy' not in headers):
             findings.append({
                 "type": "Missing Security Header",
                 "header": "Permissions-Policy",
@@ -130,20 +129,19 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
         findings = []
         is_https = url.startswith('https://')
 
-        for cookie in response.cookies:
+        for cookie_name, cookie_value in response.get('cookies', {}).items():
             cookie_findings = []
 
             # Check Secure flag
-            if is_https and not cookie.secure:
+            if is_https and not response.get('headers', {}).get('Set-Cookie', '').lower().count('secure'): # Heuristic for secure flag
                 cookie_findings.append("missing Secure flag")
 
             # Check HttpOnly flag
-            if not cookie.has_nonstandard_attr('HttpOnly'):
+            if not response.get('headers', {}).get('Set-Cookie', '').lower().count('httponly'): # Heuristic for httponly flag
                 cookie_findings.append("missing HttpOnly flag")
 
             # Check SameSite attribute
-            if not any(attr.lower().startswith('samesite') 
-                      for attr in cookie._rest.keys()):
+            if not response.get('headers', {}).get('Set-Cookie', '').lower().count('samesite'): # Heuristic for samesite attribute
                 cookie_findings.append("missing SameSite attribute")
 
             if cookie_findings:
@@ -151,7 +149,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
                     "type": "Insecure Cookie Configuration",
                     "cookie_name": cookie.name,
                     "severity": "Medium",
-                    "description": f"Cookie has {', '.join(cookie_findings)}",
+                    "description": f"Cookie '{cookie_name}' has {', '.join(cookie_findings)}",
                     "mitigation": "Set appropriate security attributes for cookies"
                 })
 
@@ -167,11 +165,11 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             List of dictionaries containing vulnerability details
         """
         findings = []
-        headers = response.headers
+        headers = response.get('headers', {})
 
         # Check for server header
-        if 'Server' in headers:
-            server = headers['Server']
+        if 'Server' in headers or 'server' in headers:
+            server = headers.get('Server', headers.get('server', ''))
             if re.search(r'[0-9.]+', server):  # Version number detected
                 findings.append({
                     "type": "Information Disclosure",
@@ -182,12 +180,12 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
                 })
 
         # Check for X-Powered-By header
-        if 'X-Powered-By' in headers:
+        if 'X-Powered-By' in headers or 'x-powered-by' in headers:
             findings.append({
                 "type": "Information Disclosure",
-                "header": "X-Powered-By",
+                "header": "X-Powered-By", # Use canonical name for reporting
                 "severity": "Low",
-                "description": f"X-Powered-By header reveals technology: {headers['X-Powered-By']}",
+                "description": f"X-Powered-By header reveals technology: {headers.get('X-Powered-By', headers.get('x-powered-by', ''))}",
                 "mitigation": "Remove X-Powered-By header"
             })
 
@@ -201,7 +199,7 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
         ]
 
         for header in sensitive_headers:
-            if header in headers:
+            if header in headers or header.lower() in headers:
                 findings.append({
                     "type": "Information Disclosure",
                     "header": header,
@@ -222,10 +220,10 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
             List of dictionaries containing vulnerability details
         """
         findings = []
-        headers = response.headers
+        headers = response.get('headers', {})
 
-        if 'Access-Control-Allow-Origin' in headers:
-            allowed_origin = headers['Access-Control-Allow-Origin']
+        if 'Access-Control-Allow-Origin' in headers or 'access-control-allow-origin' in headers:
+            allowed_origin = headers.get('Access-Control-Allow-Origin', headers.get('access-control-allow-origin', ''))
             
             if allowed_origin == '*':
                 findings.append({
@@ -237,8 +235,8 @@ class HTTPSecurityScanner(VulnerabilityTestingModule):
                 })
 
             # Check for dynamic CORS configuration
-            if 'Origin' in response.request.headers:
-                request_origin = response.request.headers['Origin']
+            if 'Origin' in response.get('request_headers', {}): # Assuming request_headers might be logged
+                request_origin = response.get('request_headers', {}).get('Origin', '')
                 if request_origin == allowed_origin:
                     findings.append({
                         "type": "Insecure CORS Configuration",

@@ -11,6 +11,7 @@ to identify and exploit SQL injection vulnerabilities in web applications.
 import os
 import json
 import re
+import random
 import time
 import logging
 import urllib.parse
@@ -19,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from core.base_module import VulnTestingModule
 from core.utils import make_request, run_command, ensure_dir_exists
 from core.payloads import generate_payloads, waf_fingerprint
-from core.memory import AgentContext
+from core.memory import AgentMemory
 
 # Configure logger
 logger = logging.getLogger('pin0cchi0.vuln_testing.sql_injection')
@@ -47,7 +48,7 @@ class SQLInjectionTester(VulnTestingModule):
         self.confirmed_vulnerabilities = []
         # Persistent learning context
         try:
-            self.ctx = AgentContext()
+            self.ctx = AgentMemory()
         except Exception:
             self.ctx = None
         
@@ -389,6 +390,8 @@ class SQLInjectionTester(VulnTestingModule):
         
         # Test each payload
         for p in payload_defs:
+            # Randomized jitter to evade detection (0.5s to 2.5s)
+            time.sleep(random.uniform(0.5, 2.5))
             payload_key = p.get('key') if isinstance(p, dict) else None
             payload = p.get('value') if isinstance(p, dict) else str(p)
             # Replace parameter value with payload
@@ -414,8 +417,8 @@ class SQLInjectionTester(VulnTestingModule):
             
             found = False
             # Check for SQL error patterns in the response
-            for pattern in self.sql_error_patterns:
-                if re.search(pattern, response['text'], re.IGNORECASE):
+            for pattern in self.sql_error_patterns: # type: ignore
+                if re.search(pattern, response.get('text', ''), re.IGNORECASE):
                     vuln = {
                         'name': "Error-based SQL Injection",
                         'severity': "high",
@@ -434,8 +437,8 @@ class SQLInjectionTester(VulnTestingModule):
             
             if not found:
                 # Check for significant response differences
-                try:
-                    if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
+                try: # type: ignore
+                    if len(response.get('text', '')) > len(baseline_response.get('text', '')) * 1.5 or len(response.get('text', '')) < len(baseline_response.get('text', '')) * 0.5:
                         vuln = {
                             'name': "Potential SQL Injection",
                             'severity': "medium",
@@ -500,8 +503,8 @@ class SQLInjectionTester(VulnTestingModule):
             return
         
         # Compare responses
-        if (true_response['text'] == baseline_response['text'] and 
-            false_response['text'] != baseline_response['text']):
+        if (true_response.get('text', '') == baseline_response.get('text', '') and 
+            false_response.get('text', '') != baseline_response.get('text', '')):
             vuln = {
                 'name': "Blind SQL Injection",
                 'severity': "high",
@@ -538,6 +541,8 @@ class SQLInjectionTester(VulnTestingModule):
         
         # Test each time-based payload
         for p in time_payloads:
+            # Randomized jitter to evade detection (0.5s to 2.5s)
+            time.sleep(random.uniform(0.5, 2.5))
             payload_key = p.get('key')
             payload = p.get('value')
             delay = (p.get('meta') or {}).get('delay_s', 5)
@@ -607,6 +612,8 @@ class SQLInjectionTester(VulnTestingModule):
         
         # Test each payload
         for p in payload_defs:
+            # Randomized jitter to evade detection (0.5s to 2.5s)
+            time.sleep(random.uniform(0.5, 2.5))
             payload_key = p.get('key') if isinstance(p, dict) else None
             payload = p.get('value') if isinstance(p, dict) else str(p)
             
@@ -646,8 +653,8 @@ class SQLInjectionTester(VulnTestingModule):
             
             # Check for significant response differences
             if not found:
-                try:
-                    if len(response['text']) > len(baseline_response['text']) * 1.5 or len(response['text']) < len(baseline_response['text']) * 0.5:
+                try: # type: ignore
+                    if len(response.get('text', '')) > len(baseline_response.get('text', '')) * 1.5 or len(response.get('text', '')) < len(baseline_response.get('text', '')) * 0.5:
                         vuln = {
                             'name': "Potential SQL Injection (POST)",
                             'severity': "medium",
@@ -696,8 +703,8 @@ class SQLInjectionTester(VulnTestingModule):
             return
         
         # Compare responses
-        if (true_response['text'] == baseline_response['text'] and 
-            false_response['text'] != baseline_response['text']):
+        if (true_response.get('text', '') == baseline_response.get('text', '') and 
+            false_response.get('text', '') != baseline_response.get('text', '')):
             vuln = {
                 'name': "Blind SQL Injection (POST)",
                 'severity': "high",
@@ -730,6 +737,8 @@ class SQLInjectionTester(VulnTestingModule):
         
         # Test each time-based payload
         for p in time_payloads:
+            # Randomized jitter to evade detection (0.5s to 2.5s)
+            time.sleep(random.uniform(0.5, 2.5))
             payload_key = p.get('key')
             payload = p.get('value')
             delay = (p.get('meta') or {}).get('delay_s', 5)
@@ -801,7 +810,7 @@ class SQLInjectionTester(VulnTestingModule):
                 
                 # Check for SQL error patterns in the response
                 for pattern in self.sql_error_patterns:
-                    if re.search(pattern, response['text'], re.IGNORECASE):
+                    if re.search(pattern, response.get('text', ''), re.IGNORECASE):
                         vuln = {
                             'name': f"SQL Injection in {header} header",
                             'severity': "high",
@@ -828,8 +837,8 @@ class SQLInjectionTester(VulnTestingModule):
             return
         
         # Extract cookies from response
-        cookies = {}
-        if 'set-cookie' in baseline_response['headers']:
+        cookies = {} # type: ignore
+        if 'set-Cookie' in baseline_response.get('headers', {}):
             cookie_header = baseline_response['headers']['set-cookie']
             cookie_parts = cookie_header.split(';')
             for part in cookie_parts:
@@ -855,7 +864,7 @@ class SQLInjectionTester(VulnTestingModule):
                 
                 # Check for SQL error patterns in the response
                 for pattern in self.sql_error_patterns:
-                    if re.search(pattern, response['text'], re.IGNORECASE):
+                    if re.search(pattern, response.get('text', ''), re.IGNORECASE):
                         vuln = {
                             'name': f"SQL Injection in {cookie_name} cookie",
                             'severity': "high",

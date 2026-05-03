@@ -102,7 +102,7 @@ class DNSEnumModule(ReconModule):
         logger.info(f"Getting nameservers for {domain}")
         
         cmd = ['dig', 'NS', domain, '+short']
-        result = run_command(cmd)
+        result = run_command(" ".join(cmd))
         
         nameservers = []
         if result['success']:
@@ -122,7 +122,7 @@ class DNSEnumModule(ReconModule):
             logger.info(f"Getting {record_type} records for {domain}")
             
             cmd = ['dig', record_type, domain, '+short']
-            result = run_command(cmd)
+            result = run_command(" ".join(cmd))
             
             if result['success']:
                 output = result['stdout']
@@ -142,7 +142,7 @@ class DNSEnumModule(ReconModule):
         logger.info(f"Running dnsrecon on {domain}")
         
         cmd = ['dnsrecon', '-d', domain, '-a']
-        result = run_command(cmd)
+        result = run_command(" ".join(cmd))
         
         if not result['success']:
             logger.warning(f"dnsrecon failed: {result.get('error', 'Unknown error')}")
@@ -153,7 +153,7 @@ class DNSEnumModule(ReconModule):
             logger.info(f"Attempting zone transfer from {ns} for {domain}")
             
             cmd = ['dig', 'AXFR', domain, f'@{ns}']
-            result = run_command(cmd)
+            result = run_command(" ".join(cmd))
             
             if result['success']:
                 output = result['stdout']
@@ -187,7 +187,7 @@ class DNSEnumModule(ReconModule):
         # Also try with host command
         for ns in self.nameservers:
             cmd = ['host', '-l', domain, ns]
-            result = run_command(cmd)
+            result = run_command(" ".join(cmd))
             
             if result['success'] and 'Transfer of' in result['stdout'] and 'failed' not in result['stdout'].lower():
                 logger.info(f"Zone transfer with host command from {ns} for {domain} successful")

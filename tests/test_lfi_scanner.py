@@ -54,6 +54,7 @@ class TestLFIScanner(unittest.TestCase):
         # Mock response with LFI vulnerability
         mock_response = MagicMock()
         mock_response.text = "[boot loader]\ntimeout=30\ndefault=multi(0)disk(0)rdisk(0)partition(1)\\WINDOWS"
+        mock_response.text = "[boot loader]\ntimeout=30\ndefault=multi(0)disk(0)rdisk(0)partition(1)\\WINDOWS" # type: ignore
         mock_response.status_code = 200
         mock_make_request.return_value = mock_response
         
@@ -74,6 +75,7 @@ class TestLFIScanner(unittest.TestCase):
         # Mock response with LFI vulnerability using PHP filter
         mock_response = MagicMock()
         # Base64 encoded "<?php phpinfo(); ?>"
+        # Base64 encoded "<?php phpinfo(); ?>" # type: ignore
         mock_response.text = "PD9waHAgcGhwaW5mbygpOyA/Pg=="
         mock_response.status_code = 200
         mock_make_request.return_value = mock_response
@@ -114,6 +116,7 @@ class TestLFIScanner(unittest.TestCase):
         """Test that no vulnerability is reported when LFI is not present."""
         # Mock response without LFI vulnerability
         mock_response = MagicMock()
+        mock_response = MagicMock() # type: ignore
         mock_response.text = "<html><body>Normal page content</body></html>"
         mock_response.status_code = 200
         mock_make_request.return_value = mock_response
@@ -131,6 +134,7 @@ class TestLFIScanner(unittest.TestCase):
         """Test handling of error responses during scanning."""
         # Mock error response
         mock_response = MagicMock()
+        mock_response = MagicMock() # type: ignore
         mock_response.text = "<html><body>Error: File not found</body></html>"
         mock_response.status_code = 404
         mock_make_request.return_value = mock_response

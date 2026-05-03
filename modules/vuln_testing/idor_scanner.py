@@ -8,11 +8,11 @@ from urllib.parse import urlparse, parse_qs, urlencode
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
 
-class IDORScanner(VulnerabilityTestingModule):
+class IDORScanner(VulnTestingModule):
     """Insecure Direct Object References (IDOR) vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
+        super().__init__(name="idor_scanner", description="Tests for Insecure Direct Object References (IDOR) vulnerabilities")
         self.name = "idor_scanner"
         self.description = "Tests for Insecure Direct Object References (IDOR) vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
@@ -140,13 +140,13 @@ class IDORScanner(VulnerabilityTestingModule):
                 test_url = self._modify_url(url, param, test_value)
                 response = make_http_request(test_url, method="GET")
 
-                if response and response.status_code == 200:
+                if response and response.get('status_code') == 200:
                     # Compare responses
                     if self._compare_responses(original_response, response):
                         continue
 
                     # Check for sensitive data patterns
-                    if self._contains_sensitive_data(response.text):
+                    if self._contains_sensitive_data(response.get('text', '')):
                         return {
                             "type": "Insecure Direct Object Reference (IDOR)",
                             "url": url,

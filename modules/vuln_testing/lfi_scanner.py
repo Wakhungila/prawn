@@ -437,7 +437,7 @@ class LFIScanner(VulnTestingModule):
             return endpoints
         
         html = response['text']
-        
+
         # Find all links with query parameters
         link_pattern = re.compile(r'href=["\']([^"\'>]*\?[^"\'>]*)["\']', re.IGNORECASE)
         links = link_pattern.findall(html)
@@ -660,7 +660,7 @@ class LFIScanner(VulnTestingModule):
         # Check for Unix file patterns
         for pattern in self.unix_detection_patterns:
             if pattern.search(text):
-                indicators.append(f"Unix pattern match: {pattern.pattern}")
+                indicators.append(f"Unix pattern match: {pattern.pattern}") # type: ignore
         
         # Check for Windows file patterns
         for pattern in self.windows_detection_patterns:
@@ -676,12 +676,12 @@ class LFIScanner(VulnTestingModule):
                     decoded_text = base64.b64decode(text.strip()).decode('utf-8', errors='ignore')
                     
                     # Check the decoded content for file patterns
-                    for pattern in self.unix_detection_patterns:
-                        if pattern.search(decoded_text):
+                    for pattern in self.unix_detection_patterns: # type: ignore
+                        if pattern.search(decoded_text): # type: ignore
                             indicators.append(f"Base64 decoded Unix pattern match: {pattern.pattern}")
                     
-                    for pattern in self.windows_detection_patterns:
-                        if pattern.search(decoded_text):
+                    for pattern in self.windows_detection_patterns: # type: ignore
+                        if pattern.search(decoded_text): # type: ignore
                             indicators.append(f"Base64 decoded Windows pattern match: {pattern.pattern}")
                     
                     # Check for PHP code patterns in decoded content

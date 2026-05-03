@@ -6,15 +6,14 @@ import re
 import time
 from bs4 import BeautifulSoup # type: ignore
 from urllib.parse import urljoin, urlparse
-from core.base_module import VulnerabilityTestingModule
+from core.base_module import VulnTestingModule
 from core.utils import make_http_request, generate_random_string
 
-class AuthScanner(VulnerabilityTestingModule):
+class AuthScanner(VulnTestingModule):
     """Authentication and Session Management vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "auth_scanner"
+        super().__init__(name="auth_scanner", description="Tests for authentication and session management vulnerabilities")
         self.description = "Tests for authentication and session management vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -98,7 +97,7 @@ class AuthScanner(VulnerabilityTestingModule):
                     data=data
                 )
 
-                if not response or response.status_code == 429:
+                if not response or response.get('status_code') == 429:
                     # Rate limiting detected
                     return None
 
@@ -154,7 +153,7 @@ class AuthScanner(VulnerabilityTestingModule):
                     data=data
                 )
 
-                if response and 'password' not in response.text.lower():
+                if response and 'password' not in response.get('text', '').lower():
                     findings.append({
                         "type": "Weak Password Policy",
                         "url": form['action'],
@@ -219,7 +218,7 @@ class AuthScanner(VulnerabilityTestingModule):
                 if login_response:
                     new_session = None
                     for cookie in login_response.cookies:
-                        if cookie.name == session_cookie.name:
+                        if cookie.get('name') == session_cookie.get('name'):
                             new_session = cookie.value
                             break
 
@@ -260,7 +259,7 @@ class AuthScanner(VulnerabilityTestingModule):
                     data={remember_me['name']: 'on'}
                 )
 
-                if response:
+                if response and response.get('success'):
                     for cookie in response.cookies:
                         if any(term in cookie.name.lower() 
                                for term in ['remember', 'persistent']):

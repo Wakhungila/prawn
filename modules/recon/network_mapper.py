@@ -100,7 +100,7 @@ class NetworkMapperModule(ReconModule):
         logger.info(f"Discovering alive hosts in {target}")
         
         # Use nmap for host discovery
-        cmd = ['nmap', '-sn', '-T4', target, '-oG', '-']
+        cmd = "nmap -sn -T4 " + target + " -oG -"
         result = run_command(cmd)
         
         if result['success']:
@@ -130,7 +130,7 @@ class NetworkMapperModule(ReconModule):
         logger.info(f"Running ping sweep on {target}")
         
         # Use fping for ping sweep
-        cmd = ['fping', '-a', '-g', target]
+        cmd = "fping -a -g " + target
         result = run_command(cmd)
         
         if result['success']:
@@ -154,7 +154,7 @@ class NetworkMapperModule(ReconModule):
             logger.debug(f"Running traceroute to {host}")
             
             # Use traceroute command
-            cmd = ['traceroute', '-n', host]
+            cmd = "traceroute -n " + host
             result = run_command(cmd)
             
             if result['success']:
@@ -190,7 +190,7 @@ class NetworkMapperModule(ReconModule):
             logger.debug(f"Scanning services on {host}")
             
             # Use nmap for service discovery
-            cmd = ['nmap', '-sV', '-T4', '-F', host, '-oG', '-']
+            cmd = "nmap -sV -T4 -F " + host + " -oG -"
             result = run_command(cmd)
             
             if result['success']:

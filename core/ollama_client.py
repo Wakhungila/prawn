@@ -41,9 +41,19 @@ class OllamaClient:
                     return None
                 
                 data = json.loads(raw_json)
+
+                # Unwrap if the LLM wrapped the result in a key matching the model name
+                if isinstance(data, dict) and len(data) == 1:
+                    key = list(data.keys())[0]
+                    if key.lower() == response_model.__name__.lower():
+                        if data[key] is None:
+                            return None
+                        if isinstance(data[key], dict):
+                            data = data[key]
+
                 return response_model.model_validate(data)
                 
-        except (httpx.HTTPError, json.JSONDecodeError, ValidationError) as e:
+        except (httpx.HTTPError, json.JSONDecodeError, ValidationError, TypeError) as e: # Added TypeError for common Pydantic validation issues
             logger.error(f"Structured generation failed for model {response_model.__name__}: {e}")
             return None
 

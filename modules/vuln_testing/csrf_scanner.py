@@ -5,15 +5,14 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs
-from core.base_module import VulnerabilityTestingModule
+from core.base_module import VulnTestingModule
 from core.utils import make_http_request, generate_random_string
 
-class CSRFScanner(VulnerabilityTestingModule):
+class CSRFScanner(VulnTestingModule):
     """Cross-Site Request Forgery (CSRF) vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "csrf_scanner"
+        super().__init__(name="csrf_scanner", description="Tests for Cross-Site Request Forgery (CSRF) vulnerabilities")
         self.description = "Tests for Cross-Site Request Forgery (CSRF) vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -157,8 +156,8 @@ class CSRFScanner(VulnerabilityTestingModule):
                 )
 
                 # If either request succeeds, might be vulnerable
-                if (response1 and response1.status_code == 200) or \
-                   (response2 and response2.status_code == 200):
+                if (response1 and response1.get('status_code') == 200) or \
+                   (response2 and response2.get('status_code') == 200):
                     return {
                         "type": "Cross-Site Request Forgery (CSRF)",
                         "url": form['action'],

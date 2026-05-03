@@ -3,6 +3,7 @@ import logging
 import json
 import asyncio
 import random
+import httpx
 from typing import List, Dict, Any
 from core.schemas import Anomaly, AgentOutput, ScanConfig
 from core.ollama_client import OllamaClient
@@ -88,13 +89,6 @@ class FinderAgent:
         for r in results:
             anomalies.extend(r)
 
-        # 7. State Desync Detection (Wake)
-        desync_anomalies = await self._detect_state_desync(target)
-        anomalies.extend(desync_anomalies)
-
-        # 8. Fork Conflict Resolution (Wake Test Case Generation)
-        await self._resolve_fork_conflicts(target, desync_anomalies)
-
         summary = f"Discovery complete. Identified {len(anomalies)} anomalies across protocols."
         logger.info(summary)
         
@@ -122,11 +116,15 @@ class FinderAgent:
         logger.debug(f"Probing gRPC for {target}")
         anomalies = []
         
-        # Check for gRPC specific content-type or reflection indicators
-        headers = {"Content-Type": "application/grpc"}
-        response = make_request(target, method="POST", headers=headers)
-        
-        if response.get("status_code") == 200 or response.get("headers", {}).get("grpc-status"):
+        # Use HTTP/2 Client for gRPC support
+        async with httpx.AsyncClient(http2=True) as client:
+            headers = {"Content-Type": "application/grpc", "TE": "trailers"}
+            try:
+                response = await client.post(target, headers=headers, timeout=10.0)
+            except Exception:
+                return anomalies
+
+        if response.status_code == 200 or "grpc-status" in response.headers:
             anomalies.append(Anomaly(
                 target=target,
                 observation="gRPC endpoint identified; negotiating service reflection...",
@@ -148,6 +146,17 @@ class FinderAgent:
                 admin_keywords = ['admin', 'config', 'debug', 'internal', 'reset', 'secret', 'update', 'delete', 'root']
                 sensitive_methods = [m for m in method_list if any(k in m.lower() for k in admin_keywords)]
                 
+                # Heuristic Payload Generation for sensitive methods
+                payload_examples = {}
+                for m in sensitive_methods:
+                    m_lower = m.lower()
+                    if any(k in m_lower for k in ['update', 'set', 'config']):
+                        payload_examples[m] = {"id": "123", "value": "PROBE", "config_key": "security_audit"}
+                    elif any(k in m_lower for k in ['delete', 'remove', 'reset']):
+                        payload_examples[m] = {"id": "123", "force": True, "confirm": True}
+                    else:
+                        payload_examples[m] = {"id": "1", "verbose": True}
+
                 observation = f"gRPC Reflection Enabled. Found {len(method_list)} methods."
                 if sensitive_methods:
                     observation += f" Identified potential ADMINISTRATIVE methods: {sensitive_methods[:5]}"
@@ -155,7 +164,7 @@ class FinderAgent:
                 anomalies.append(Anomaly(
                     target=target,
                     observation=observation,
-                    metadata={"methods": method_list, "sensitive_methods": sensitive_methods},
+                    metadata={"methods": method_list, "sensitive_methods": sensitive_methods, "payload_examples": payload_examples},
                     confidence=1.0,
                     suggested_vector="gRPC Information Disclosure"
                 ))

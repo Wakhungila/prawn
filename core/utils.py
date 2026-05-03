@@ -199,6 +199,29 @@ def run_command(command, timeout=60):
             'stderr': str(e)
         }
 
+async def launch_research_browser(url: str, creds: dict) -> bool:
+    """Launches Burp Suite Community and Firefox pre-configured for the proxy."""
+    try:
+        logger.info("Attempting to start Burp Suite Community...")
+        # Assumes Burp and Firefox are in the PATH
+        subprocess.Popen(["BurpSuiteCommunity"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        # Wait a moment for Burp proxy to initialize (default 8080)
+        await asyncio.sleep(5)
+        
+        logger.info(f"Launching Firefox for {url}...")
+        # Launch Firefox with a temporary profile and proxy settings
+        ff_cmd = [
+            "firefox", 
+            "--new-instance", 
+            "--proxy-server=http://127.0.0.1:8080", 
+            url
+        ]
+        subprocess.Popen(ff_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to launch interactive tools: {e}")
+        return False
 def make_request(url, method='GET', headers=None, data=None, params=None, timeout=30, verify=True, allow_redirects=True, proxies=None):
     """Make an HTTP request and return the response. Honors Manual Mode proxy and logs request/response for export."""
     if headers is None:
@@ -227,6 +250,7 @@ def make_request(url, method='GET', headers=None, data=None, params=None, timeou
         resp_record = {
             'status': response.status_code,
             'headers': dict(response.headers),
+            'cookies': response.cookies.get_dict(),
             'text': response.text,
             'time_ms': dt_ms
         }
@@ -235,6 +259,7 @@ def make_request(url, method='GET', headers=None, data=None, params=None, timeou
             'success': True,
             'status_code': response.status_code,
             'headers': dict(response.headers),
+            'cookies': response.cookies.get_dict(),
             'content': response.content,
             'text': response.text,
             'url': response.url

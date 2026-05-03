@@ -113,7 +113,7 @@ class WebCrawlerModule(ReconModule):
         
         # Make request
         response = make_request(url)
-        
+
         if not response['success']:
             logger.warning(f"Failed to fetch {url}: {response.get('error', 'Unknown error')}")
             return

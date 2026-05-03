@@ -54,10 +54,26 @@ class PrawnOrchestrator:
         logger.info(f"PRAWN Engine engaged for target: {self.config.target}")
         self._emit('status', "SURVEYING target environment")
 
+        # Rule: Start Interactive Discovery Environment
+        if self.config.target.startswith("http"):
+            self._emit('status', "LAUNCHING Burp Suite & Firefox (Interactive Mode)")
+            from core.utils import launch_research_browser
+            # Pass credentials to the navigator context
+            credentials = {
+                "accounts": ["pin0ccs+1@wearehackerone.com", "pin0ccs+2@wearehackerone.com"],
+                "password": "10_PrawnyHack"
+            }
+            browser_success = await launch_research_browser(self.config.target, credentials)
+            if browser_success:
+                self._emit('status', "INTERVENTION: User accounts ready. Waiting for system navigation...")
+                # Wait for user to complete OTP/OAuth if detected
+                print(f"\n[!] Interactive Navigation Active. Target: {self.config.target}")
+                input("[?] Press ENTER once you have finished manual navigation in Firefox...")
+
         # 1. FINDER PHASE (Discovery)
         # Logic: If local repo, prioritize Git Delta (Principle 1)
         if os.path.isdir(self.config.target) and self.config.delta_audit:
-            self._emit('status', f"DISSECTING codebase delta ({self.config.delta_audit})")
+            self._emit('status', f"DISSECTING codebase delta ({self.config.delta_audit})") # type: ignore
             git_helper = GitDiffModule(self.config.target)
             changed_files = git_helper.get_changed_files(self.config.delta_audit)
             if changed_files:

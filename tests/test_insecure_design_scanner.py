@@ -36,6 +36,7 @@ class TestInsecureDesignScanner(unittest.TestCase):
         # Mock response with insecure patterns
         mock_response = MagicMock()
         mock_response.text = """
+        mock_response.text = """ # type: ignore
         <html>
             <body>
                 <a href="/user?id=123">User Profile</a>
@@ -47,10 +48,13 @@ class TestInsecureDesignScanner(unittest.TestCase):
         </html>
         """
         mock_response.status_code = 200
+        """ # type: ignore
+        mock_response.status_code = 200 # type: ignore
         mock_response.headers = {
             'Server': 'Apache/2.4.41',
             'X-Powered-By': 'PHP/7.4.3'
         }
+        } # type: ignore
         mock_make_request.return_value = mock_response
         
         # Run the analysis
@@ -72,12 +76,20 @@ class TestInsecureDesignScanner(unittest.TestCase):
         mock_login_response.status_code = 200
         mock_login_response.headers = {}
         mock_login_response.text = '<form action="/login" method="post">Login Form</form>'
+        mock_login_response = MagicMock() # type: ignore
+        mock_login_response.status_code = 200 # type: ignore
+        mock_login_response.headers = {} # type: ignore
+        mock_login_response.text = '<form action="/login" method="post">Login Form</form>' # type: ignore
         
         # Mock password reset page response
         mock_reset_response = MagicMock()
         mock_reset_response.status_code = 200
         mock_reset_response.headers = {}
         mock_reset_response.text = '<form action="/reset" method="post">Reset Form</form>'
+        mock_reset_response = MagicMock() # type: ignore
+        mock_reset_response.status_code = 200 # type: ignore
+        mock_reset_response.headers = {} # type: ignore
+        mock_reset_response.text = '<form action="/reset" method="post">Reset Form</form>' # type: ignore
         
         # Configure mock to return different responses based on URL
         def side_effect(url, **kwargs):
@@ -108,12 +120,20 @@ class TestInsecureDesignScanner(unittest.TestCase):
         mock_admin_response.status_code = 200
         mock_admin_response.headers = {}
         mock_admin_response.text = '<h1>Admin Dashboard</h1>'
+        mock_admin_response = MagicMock() # type: ignore
+        mock_admin_response.status_code = 200 # type: ignore
+        mock_admin_response.headers = {} # type: ignore
+        mock_admin_response.text = '<h1>Admin Dashboard</h1>' # type: ignore
         
         # Mock dashboard page response - redirects to login
         mock_dashboard_response = MagicMock()
         mock_dashboard_response.status_code = 302
         mock_dashboard_response.headers = {'Location': '/login'}
         mock_dashboard_response.text = ''
+        mock_dashboard_response = MagicMock() # type: ignore
+        mock_dashboard_response.status_code = 302 # type: ignore
+        mock_dashboard_response.headers = {'Location': '/login'} # type: ignore
+        mock_dashboard_response.text = '' # type: ignore
         
         # Configure mock to return different responses based on URL
         def side_effect(url):
@@ -145,6 +165,7 @@ class TestInsecureDesignScanner(unittest.TestCase):
         """Test checking business logic design issues."""
         # Mock checkout page response with price parameters
         mock_checkout_response = MagicMock()
+        mock_checkout_response = MagicMock() # type: ignore
         mock_checkout_response.status_code = 200
         mock_checkout_response.headers = {}
         mock_checkout_response.text = '''
@@ -179,6 +200,7 @@ class TestInsecureDesignScanner(unittest.TestCase):
         """Test checking API design issues."""
         # Mock API response with documentation
         mock_api_response = MagicMock()
+        mock_api_response = MagicMock() # type: ignore
         mock_api_response.status_code = 200
         mock_api_response.headers = {'Content-Type': 'application/json'}
         mock_api_response.text = '''
@@ -221,6 +243,7 @@ class TestInsecureDesignScanner(unittest.TestCase):
         """Test extracting links from HTML content."""
         # Create mock response with links
         mock_response = MagicMock()
+        mock_response = MagicMock() # type: ignore
         mock_response.text = '''
         <html>
             <body>

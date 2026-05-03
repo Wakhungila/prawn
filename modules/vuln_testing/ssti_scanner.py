@@ -5,15 +5,14 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs, urlencode
-from core.base_module import VulnerabilityTestingModule
-from core.utils import make_http_request, generate_random_string
+from core.base_module import VulnTestingModule
+from core.utils import make_http_request, generate_random_string # Removed unused generate_random_string
 
-class SSTIScanner(VulnerabilityTestingModule):
+class SSTIScanner(VulnTestingModule):
     """Server-Side Template Injection (SSTI) vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "ssti_scanner"
+        super().__init__(name="ssti_scanner", description="Tests for Server-Side Template Injection vulnerabilities")
         self.description = "Tests for Server-Side Template Injection vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -71,7 +70,7 @@ class SSTIScanner(VulnerabilityTestingModule):
         """
         inputs = []
         try:
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.get('text', ''), 'html.parser') # type: ignore
 
             # Extract form inputs
             for form in soup.find_all('form'):
@@ -117,8 +116,8 @@ class SSTIScanner(VulnerabilityTestingModule):
         """
         try:
             # Look for template engine signatures in response headers and content
-            headers = response.headers
-            content = response.text.lower()
+            headers = response.get('headers', {})
+            content = response.get('text', '').lower()
 
             if 'x-template-engine' in headers:
                 engine = headers['x-template-engine'].lower()

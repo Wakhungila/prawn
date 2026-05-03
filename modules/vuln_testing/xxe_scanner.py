@@ -3,15 +3,14 @@
 from typing import Dict, List, Optional, Tuple
 import requests
 import re
-from core.base_module import VulnerabilityTestingModule
-from core.utils import make_http_request, generate_random_string, make_request
+from core.base_module import VulnTestingModule
+from core.utils import make_http_request, generate_random_string # Removed unused make_request
 
-class XXEScanner(VulnerabilityTestingModule):
+class XXEScanner(VulnTestingModule):
     """XML External Entity (XXE) vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "xxe_scanner"
+        super().__init__(name="xxe_scanner", description="Tests for XML External Entity (XXE) vulnerabilities")
         self.description = "Tests for XML External Entity (XXE) vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -87,8 +86,8 @@ class XXEScanner(VulnerabilityTestingModule):
         Returns:
             bool: True if endpoint likely accepts XML, False otherwise
         """
-        content_type = response.headers.get('Content-Type', '').lower()
-        return any([
+        content_type = response.get('headers', {}).get('Content-Type', '').lower()
+        return bool(any([
             'xml' in content_type,
             'soap' in content_type,
             '<\?xml' in response.text,
@@ -96,7 +95,7 @@ class XXEScanner(VulnerabilityTestingModule):
             '</xml>' in response.text
         ])
 
-    def test_endpoint(self, url: str, method: str = "POST", headers: Dict = None) -> Optional[Dict]:
+    def test_endpoint(self, url: str, method: str = "POST", headers: Optional[Dict] = None) -> Optional[Dict]:
         """Test an endpoint for XXE vulnerabilities.
 
         Args:
@@ -165,8 +164,8 @@ class XXEScanner(VulnerabilityTestingModule):
                 })
 
             # Parse HTML to find potential XML endpoints
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(response.text, 'html.parser')
+            from bs4 import BeautifulSoup # type: ignore
+            soup = BeautifulSoup(response.get('text', ''), 'html.parser')
 
             # Look for forms that might accept XML
             for form in soup.find_all('form'):

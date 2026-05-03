@@ -28,7 +28,7 @@ class EconomicAnalyzer:
         logger.info(f"Simulating economic flow for: {hypothesis.title}")
         
         # Convert attack chain logic to symbolic input params for Rust simulator
-        mock_params = [0xaa, 0xbb, 0xcc] 
+        target_slot = 0 # Defaulting to slot 0 (common for owner/admin)
         
-        result_json = prawn_core.simulate_value_flow(bytecode, bytes(mock_params))
+        result_json = prawn_core.simulate_value_flow(bytecode, target_slot)
         return json.loads(result_json)

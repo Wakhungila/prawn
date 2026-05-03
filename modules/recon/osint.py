@@ -111,7 +111,7 @@ class OSINTModule(ReconModule):
         logger.info(f"Running WHOIS lookup on {target}")
         
         cmd = ['whois', target]
-        result = run_command(cmd)
+        result = run_command(" ".join(cmd))
         
         if result['success']:
             output = result['stdout']
@@ -149,7 +149,7 @@ class OSINTModule(ReconModule):
         harvester_output = os.path.join(output_dir, 'theharvester_output.xml')
         
         # Define sources to use
-        sources = 'bing,google,linkedin,twitter,github,hunter,censys,certspotter,crtsh,dnsdumpster,duckduckgo,netcraft,securitytrails,threatcrowd,trello,urlscan,virustotal'
+        sources = 'bing,google,linkedin,twitter,github,hunter,censys,certspotter,crtsh,dnsdumpster,duckduckgo,netcraft,securitytrails,threatcrowd,trello,urlscan,virustotal' # type: ignore
         
         cmd = ['theHarvester', '-d', target, '-b', sources, '-f', harvester_output]
         result = run_command(cmd)

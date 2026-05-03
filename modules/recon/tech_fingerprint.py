@@ -108,7 +108,7 @@ class TechFingerprintModule(ReconModule):
         
         whatweb_output = os.path.join(output_dir, 'whatweb_output.json')
         
-        cmd = ['whatweb', '--log-json=' + whatweb_output, '-a', '3', target]
+        cmd = f"whatweb --log-json={whatweb_output} -a 3 {target}"
         result = run_command(cmd)
         
         if result['success'] and os.path.exists(whatweb_output):
@@ -151,7 +151,7 @@ class TechFingerprintModule(ReconModule):
         
         wappalyzer_output = os.path.join(output_dir, 'wappalyzer_output.json')
         
-        cmd = ['wappalyzer', target, '-o', wappalyzer_output]
+        cmd = f"wappalyzer {target} -o {wappalyzer_output}"
         result = run_command(cmd)
         
         if result['success'] and os.path.exists(wappalyzer_output):

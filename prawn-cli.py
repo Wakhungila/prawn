@@ -13,7 +13,7 @@ import argparse
 import logging
 import time
 from datetime import datetime
-from prawn.core.models import ScanConfig
+from core.schemas import ScanConfig
 from core.engine import PrawnOrchestrator
 from core.git_diff import GitDiffModule
 from rich.console import Console
@@ -44,7 +44,7 @@ class PrawnCLI:
         research_parser.add_argument('target', help='Target URL or RPC endpoint')
         research_parser.add_argument('--output', '-o', default='./results', help='Output directory')
         research_parser.add_argument('--0day', dest='zero_day_mode', action='store_true', help='Enable 0-day hypothesis generation')
-        research_parser.add_argument('--web3', dest='web3_enabled', action='store_true', help='Enable Web3/EVM discovery')
+        research_parser.add_argument('--web3', '--web3-enabled', dest='web3_enabled', action='store_true', help='Enable Web3/EVM discovery')
         research_parser.add_argument('--model', default='prawn-researcher', help='Ollama model to use')
         research_parser.add_argument('--economic', action='store_true', help='Prioritize economic threat modeling')
         research_parser.add_argument('--delta', help='Audit git diff delta only (e.g. v2.0..HEAD)')
@@ -121,7 +121,7 @@ class PrawnCLI:
         return 0
 
     async def run_audit(self, args):
-        from agents.code_auditor import CodeAuditorAgent
+        from core.code_auditor import CodeAuditorAgent
         
         config = ScanConfig(
             target=args.path,

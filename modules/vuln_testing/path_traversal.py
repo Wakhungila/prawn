@@ -355,7 +355,7 @@ class PathTraversalScanner(VulnTestingModule):
             return endpoints
         
         html = response['text']
-        
+
         # Find all links with query parameters
         link_pattern = re.compile(r'href=["\']([^"\'>]*\?[^"\'>]*)["\']', re.IGNORECASE)
         links = link_pattern.findall(html)
@@ -579,12 +579,12 @@ class PathTraversalScanner(VulnTestingModule):
         # Check for Unix file patterns
         for pattern in self.unix_detection_patterns:
             if pattern.search(text):
-                indicators.append(f"Unix pattern match: {pattern.pattern}")
+                indicators.append(f"Unix pattern match: {pattern.pattern}") # type: ignore
         
         # Check for Windows file patterns
         for pattern in self.windows_detection_patterns:
             if pattern.search(text):
-                indicators.append(f"Windows pattern match: {pattern.pattern}")
+                indicators.append(f"Windows pattern match: {pattern.pattern}") # type: ignore
         
         # Check for error messages that might indicate path traversal
         error_patterns = [

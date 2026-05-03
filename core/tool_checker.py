@@ -127,7 +127,7 @@ def check_tool(spec: ToolSpec) -> Dict[str, Any]:
     # Try running version command
     try:
         ver_cmd = " ".join([cmd] + args)
-        result = run_command(ver_cmd)
+        result = run_command(ver_cmd) # type: ignore
         out = (result.get('stdout') or '') + "\n" + (result.get('stderr') or '')
         if result.get('success') or out.strip():
             status['present'] = True

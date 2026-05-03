@@ -7,15 +7,14 @@ import base64
 import pickle
 import json
 import yaml
-from core.base_module import VulnerabilityTestingModule
+from core.base_module import VulnTestingModule
 from core.utils import make_http_request, generate_random_string
 
 class DeserializationScanner(VulnTestingModule):
     """Insecure Deserialization vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
-        super().__init__(config)
-        self.name = "deserialization_scanner"
+    def __init__(self):
+        super().__init__(name="deserialization_scanner", description="Tests for Insecure Deserialization vulnerabilities")
         self.description = "Tests for Insecure Deserialization vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -133,10 +132,10 @@ class DeserializationScanner(VulnTestingModule):
                 if response:
                     # Check for signs of successful exploitation
                     if any([
-                        response.status_code == 500,  # Server error might indicate successful exploitation
-                        'admin' in response.text.lower(),  # Privilege escalation check
-                        'root' in response.text.lower(),  # Command execution check
-                        response.headers.get('X-Powered-By', '').lower() != original_value.lower()  # Changed server state
+                        response.get('status_code') == 500,
+                        'admin' in response.get('text', '').lower(),
+                        'root' in response.get('text', '').lower(),
+                        'error' in response.get('text', '').lower()
                     ]):
                         return {
                             "type": "Insecure Deserialization",

@@ -25,7 +25,7 @@ from bs4 import BeautifulSoup
 from core.base_module import BaseModule
 from core.utils import make_request, save_json_output
 
-# Configure logger
+# Configure logger # type: ignore
 logger = logging.getLogger('pin0cchi0.vuln_testing.access_control_scanner')
 
 class AccessControlScanner(BaseModule):
@@ -42,6 +42,7 @@ class AccessControlScanner(BaseModule):
         self.user_roles = []
         self.protected_endpoints = []
         self.callback_domain = None
+        self.logger = logger # Initialize logger for the instance
         self.results_dir = None
         
     def run(self, target, config=None):
@@ -130,7 +131,7 @@ class AccessControlScanner(BaseModule):
             url = urllib.parse.urljoin(self.target, path)
             response = make_request(url)
             
-            if response['success']:
+            if response.get('success'):
                 status_code = response['status_code']
                 
                 # If we get a 401, 403, or a login page, it's likely protected
@@ -154,7 +155,7 @@ class AccessControlScanner(BaseModule):
             url = urllib.parse.urljoin(self.target, path)
             response = make_request(url)
             
-            if response['success']:
+            if response.get('success'):
                 status_code = response['status_code']
                 
                 # If we get a 401 or 403, it's likely protected
@@ -247,7 +248,7 @@ class AccessControlScanner(BaseModule):
                     # Make request with session cookies
                     response = make_request(url, cookies=session_cookies)
                     
-                    if response['success'] and response['status_code'] == 200:
+                    if response.get('success') and response.get('status_code') == 200:
                         # Check if the response contains sensitive data
                         if self._contains_sensitive_data(response['text']):
                             vulnerability = {
@@ -300,7 +301,7 @@ class AccessControlScanner(BaseModule):
                 # Make request with session cookies if available
                 response = make_request(url, cookies=session_cookies)
                 
-                if response['success'] and response['status_code'] == 200:
+                if response.get('success') and response.get('status_code') == 200:
                     # Check if the response contains admin features
                     if self._contains_admin_features(response['text']):
                         vulnerability = {
@@ -363,8 +364,8 @@ class AccessControlScanner(BaseModule):
                     
                     # Make request with session cookies if available
                     response = make_request(url, method=method, json_data=data, cookies=session_cookies)
-                    
-                    if response['success'] and response['status_code'] < 400:
+
+                    if response.get('success') and response.get('status_code', 0) < 400:
                         vulnerability = {
                             'url': url,
                             'type': 'Missing Function Level Access Control',
@@ -426,8 +427,8 @@ class AccessControlScanner(BaseModule):
         for page in hidden_pages:
             url = urllib.parse.urljoin(self.target, page)
             response = make_request(url)
-            
-            if response['success'] and response['status_code'] == 200:
+
+            if response.get('success') and response.get('status_code') == 200:
                 vulnerability = {
                     'url': url,
                     'type': 'Forced Browsing',
@@ -487,8 +488,8 @@ class AccessControlScanner(BaseModule):
                     
                     # Make request with session cookies if available
                     response = make_request(url, method=method, json_data=data, cookies=session_cookies)
-                    
-                    if response['success'] and response['status_code'] == 200:
+
+                    if response.get('success') and response.get('status_code') == 200:
                         # Check if the response contains sensitive data
                         if self._contains_sensitive_data(response['text']):
                             vulnerability = {
@@ -551,7 +552,7 @@ class AccessControlScanner(BaseModule):
                     }
                     response = make_request(url, method='POST', json_data=data)
                 
-                if response['success']:
+                if response.get('success'):
                     # Check if we got cookies back
                     if 'cookies' in response and response['cookies']:
                         return response['cookies']

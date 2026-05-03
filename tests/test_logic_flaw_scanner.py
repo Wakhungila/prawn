@@ -50,6 +50,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 404,
             'text': '<html><body>Not Found</body></html>',
+            'success': True, # type: ignore
+            'status_code': 404, # type: ignore
+            'text': '<html><body>Not Found</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -80,6 +83,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 200,
             'text': '<html><body>Welcome to Admin Dashboard</body></html>',
+            'success': True, # type: ignore
+            'status_code': 200, # type: ignore
+            'text': '<html><body>Welcome to Admin Dashboard</body></html>', # type: ignore
             'headers': {'location': 'http://example.com/dashboard'}
         }
         
@@ -88,6 +94,10 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 401,
             'text': '<html><body>Invalid username or password</body></html>',
+        mock_response_fail = { # type: ignore
+            'success': True, # type: ignore
+            'status_code': 401, # type: ignore
+            'text': '<html><body>Invalid username or password</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -143,6 +153,10 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 200,
             'text': '<html><body>Order confirmed! Thank you for your purchase.</body></html>',
+        mock_response_success = { # type: ignore
+            'success': True, # type: ignore
+            'status_code': 200, # type: ignore
+            'text': '<html><body>Order confirmed! Thank you for your purchase.</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -151,6 +165,10 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 400,
             'text': '<html><body>Invalid input</body></html>',
+        mock_response_fail = { # type: ignore
+            'success': True, # type: ignore
+            'status_code': 400, # type: ignore
+            'text': '<html><body>Invalid input</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -180,10 +198,15 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 200,
             'text': '{"transaction_id": "12345"}',
+        mock_future.result.return_value = { # type: ignore
+            'success': True, # type: ignore
+            'status_code': 200, # type: ignore
+            'text': '{"transaction_id": "12345"}', # type: ignore
             'headers': {}
         }
         
         mock_executor_instance = MagicMock()
+        mock_executor_instance = MagicMock() # type: ignore
         mock_executor_instance.__enter__.return_value.submit.return_value = mock_future
         mock_executor.return_value = mock_executor_instance
         
@@ -251,6 +274,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 200,
             'text': '<html><body>Order confirmed!</body></html>',
+            'success': True, # type: ignore
+            'status_code': 200, # type: ignore
+            'text': '<html><body>Order confirmed!</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -272,6 +298,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 200,
             'text': '<html><body>User details: password=secret123</body></html>',
+            'success': True, # type: ignore
+            'status_code': 200, # type: ignore
+            'text': '<html><body>User details: password=secret123</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -280,6 +309,10 @@ class TestLogicFlawScanner(unittest.TestCase):
             'success': True,
             'status_code': 403,
             'text': '<html><body>Access denied</body></html>',
+        mock_response_fail = { # type: ignore
+            'success': True, # type: ignore
+            'status_code': 403, # type: ignore
+            'text': '<html><body>Access denied</body></html>', # type: ignore
             'headers': {}
         }
         
@@ -305,6 +338,7 @@ class TestLogicFlawScanner(unittest.TestCase):
         # Test with login page HTML
         login_html = '<html><body><form action="/login"><input type="text" name="username"><input type="password" name="password"></form></body></html>'
         self.assertTrue(self.scanner._is_login_page(login_html))
+        self.assertTrue(self.scanner._is_login_page(login_html)) # type: ignore
         
         # Test with non-login page HTML
         non_login_html = '<html><body><h1>Welcome to our website</h1></body></html>'
@@ -315,6 +349,7 @@ class TestLogicFlawScanner(unittest.TestCase):
         # Test with error page HTML
         error_html = '<html><body><h1>404 Not Found</h1><p>The requested resource was not found on this server.</p></body></html>'
         self.assertTrue(self.scanner._is_error_page(error_html))
+        self.assertTrue(self.scanner._is_error_page(error_html)) # type: ignore
         
         # Test with non-error page HTML
         non_error_html = '<html><body><h1>Welcome to our website</h1></body></html>'
@@ -343,6 +378,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             {'success': True, 'status_code': 200, 'text': '{"id": 1}'},
             {'success': True, 'status_code': 201, 'text': '{"id": 2}'},
             {'success': True, 'status_code': 200, 'text': '{"id": 3}'}
+            {'success': True, 'status_code': 200, 'text': '{"id": 1}'}, # type: ignore
+            {'success': True, 'status_code': 201, 'text': '{"id": 2}'}, # type: ignore
+            {'success': True, 'status_code': 200, 'text': '{"id": 3}'} # type: ignore
         ]
         self.assertTrue(self.scanner._check_race_condition_success(responses_diff_status))
         
@@ -351,6 +389,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             {'success': True, 'status_code': 200, 'text': '{"transaction_id": "abc123"}'},
             {'success': True, 'status_code': 200, 'text': '{"transaction_id": "abc123"}'},
             {'success': True, 'status_code': 200, 'text': '{"transaction_id": "def456"}'}
+            {'success': True, 'status_code': 200, 'text': '{"transaction_id": "abc123"}'}, # type: ignore
+            {'success': True, 'status_code': 200, 'text': '{"transaction_id": "abc123"}'}, # type: ignore
+            {'success': True, 'status_code': 200, 'text': '{"transaction_id": "def456"}'} # type: ignore
         ]
         self.assertTrue(self.scanner._check_race_condition_success(responses_dup_ids))
         
@@ -359,6 +400,9 @@ class TestLogicFlawScanner(unittest.TestCase):
             {'success': True, 'status_code': 200, 'text': '{"id": 1}'},
             {'success': True, 'status_code': 200, 'text': '{"id": 2}'},
             {'success': True, 'status_code': 200, 'text': '{"id": 3}'}
+            {'success': True, 'status_code': 200, 'text': '{"id": 1}'}, # type: ignore
+            {'success': True, 'status_code': 200, 'text': '{"id": 2}'}, # type: ignore
+            {'success': True, 'status_code': 200, 'text': '{"id": 3}'} # type: ignore
         ]
         self.assertFalse(self.scanner._check_race_condition_success(responses_consistent))
 

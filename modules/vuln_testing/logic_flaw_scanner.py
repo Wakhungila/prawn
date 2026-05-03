@@ -179,7 +179,7 @@ class LogicFlawScanner(BaseModule):
                 response = make_request(url, method=step['method'])
                 
                 if response['success'] and response['status_code'] < 404:
-                    valid_steps.append({
+                    valid_steps.append({ # type: ignore
                         'path': step['path'],
                         'method': step['method'],
                         'status_code': response['status_code']
@@ -236,7 +236,7 @@ class LogicFlawScanner(BaseModule):
                     else:
                         response = make_request(url, method='POST', json_data=payload)
                     
-                    if response['success']:
+                    if response.get('success'):
                         # Check if we got past the login page
                         if not self._is_login_page(response['text']) or 'location' in response['headers']:
                             vulnerability = {
@@ -276,7 +276,7 @@ class LogicFlawScanner(BaseModule):
                     else:
                         response = make_request(url, method='POST', json_data=creds)
                     
-                    if response['success']:
+                    if response.get('success'):
                         # Check if we got past the login page
                         if not self._is_login_page(response['text']) or 'location' in response['headers']:
                             vulnerability = {
@@ -349,7 +349,7 @@ class LogicFlawScanner(BaseModule):
                             else:
                                 response = make_request(form_url, method=form_method, data=form_data)
                             
-                            if response['success']:
+                            if response.get('success'):
                                 # Check for signs of successful parameter manipulation
                                 if self._check_parameter_manipulation_success(response, param['name'], value):
                                     vulnerability = {
@@ -465,7 +465,7 @@ class LogicFlawScanner(BaseModule):
                     else:
                         response = make_request(form_url, method=form_method, data=form_data)
                     
-                    if response['success'] and response['status_code'] < 400:
+                    if response.get('success') and response.get('status_code', 0) < 400:
                         vulnerability = {
                             'url': form_url,
                             'type': 'Business Constraint Bypass',
@@ -499,7 +499,7 @@ class LogicFlawScanner(BaseModule):
                     else:
                         response = make_request(form_url, method=form_method, data=form_data)
                     
-                    if response['success'] and response['status_code'] < 400:
+                    if response.get('success') and response.get('status_code', 0) < 400:
                         vulnerability = {
                             'url': form_url,
                             'type': 'Business Constraint Bypass',
@@ -535,7 +535,7 @@ class LogicFlawScanner(BaseModule):
             last_url = urllib.parse.urljoin(self.target, last_step['path'])
             response = make_request(last_url, method=last_step['method'])
             
-            if response['success'] and response['status_code'] < 400:
+            if response.get('success') and response.get('status_code', 0) < 400:
                 # Check if the response indicates successful access to the last step
                 if not self._is_error_page(response['text']):
                     vulnerability = {
@@ -597,8 +597,8 @@ class LogicFlawScanner(BaseModule):
             for test_id in test_ids:
                 url = urllib.parse.urljoin(self.target, pattern.replace('{id}', test_id))
                 response = make_request(url)
-                
-                if response['success'] and response['status_code'] == 200:
+
+                if response.get('success') and response.get('status_code') == 200:
                     # Check if the response contains sensitive data
                     if self._contains_sensitive_data(response['text']):
                         vulnerability = {
@@ -624,7 +624,7 @@ class LogicFlawScanner(BaseModule):
         forms = []
         
         # Make a request to the target
-        response = make_request(self.target)
+        response = make_request(self.target) # type: ignore
         
         if response['success']:
             # Parse the HTML
@@ -768,14 +768,14 @@ class LogicFlawScanner(BaseModule):
             ]
             
             for indicator in admin_indicators:
-                if re.search(indicator, response['text'], re.IGNORECASE):
+                if re.search(indicator, response.get('text', ''), re.IGNORECASE):
                     return True
         
         # Generic check for non-error response
-        return response['status_code'] < 400 and not self._is_error_page(response['text'])
+        return response.get('status_code', 0) < 400 and not self._is_error_page(response.get('text', ''))
     
     def _check_race_condition_success(self, responses):
-        """
+        """ # type: ignore
         Check if race condition testing was successful.
         
         Args:
@@ -785,7 +785,7 @@ class LogicFlawScanner(BaseModule):
             bool: True if race condition was detected, False otherwise
         """
         # Check for inconsistent responses
-        status_codes = set(response['status_code'] for response in responses if response['success'])
+        status_codes = set(response.get('status_code', 0) for response in responses if response.get('success'))
         
         # If we got different status codes, it might indicate a race condition
         if len(status_codes) > 1:
@@ -793,7 +793,7 @@ class LogicFlawScanner(BaseModule):
         
         # Check for duplicate transaction IDs or other indicators in JSON responses
         json_responses = []
-        for response in responses:
+        for response in responses: # type: ignore
             if response['success'] and 'text' in response:
                 try:
                     json_data = json.loads(response['text'])

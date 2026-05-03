@@ -127,7 +127,7 @@ class DirEnumModule(ReconModule):
         
         discovered_paths = set()
         
-        if result['success'] and os.path.exists(dirsearch_output):
+        if result.get('success') and os.path.exists(dirsearch_output):
             try:
                 with open(dirsearch_output, 'r') as f:
                     data = json.load(f)
@@ -159,7 +159,7 @@ class DirEnumModule(ReconModule):
         
         discovered_paths = set()
         
-        if result['success'] and os.path.exists(gobuster_output):
+        if result.get('success') and os.path.exists(gobuster_output):
             try:
                 with open(gobuster_output, 'r') as f:
                     for line in f:
@@ -197,7 +197,7 @@ class DirEnumModule(ReconModule):
         
         discovered_paths = set()
         
-        if result['success'] and os.path.exists(ffuf_output):
+        if result.get('success') and os.path.exists(ffuf_output):
             try:
                 with open(ffuf_output, 'r') as f:
                     data = json.load(f)

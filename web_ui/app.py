@@ -57,7 +57,7 @@ def inject_flags():
 # AI agent configuration (Ollama)
 OLLAMA_BASE_URL = os.environ.get('OLLAMA_BASE_URL', 'http://localhost:11434').rstrip('/')
 OLLAMA_API_KEY = os.environ.get('OLLAMA_API_KEY')
-OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'llama3.1')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'prawn-researcher')
 # Optional Burp REST API base (e.g., http://localhost:8090)
 BURP_API_URL = os.environ.get('BURP_API_URL')
 
@@ -646,7 +646,7 @@ def run_scan(scan_id, config):
         orchestrator._callbacks['vulnerability'] = vulnerability_callback
 
         # Run the multi-agent research loop
-        import asyncio
+        # import asyncio # Already imported
         result = asyncio.run(orchestrator.execute_research())
 
         # Update scan results

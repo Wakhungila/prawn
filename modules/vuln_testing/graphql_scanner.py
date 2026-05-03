@@ -34,7 +34,14 @@ INTROSPECTION_QUERY = {
         queryType { name }
         mutationType { name }
         subscriptionType { name }
-        types { name }
+        types {
+          name
+          kind
+          fields(includeDeprecated: true) {
+            name
+            isDeprecated
+          }
+        }
         directives { name }
       }
     }
@@ -177,6 +184,8 @@ class GraphQLScanner(VulnTestingModule):
             self._report('GraphQL Introspection Enabled', 'High', endpoint, evidence='__schema present in response', payload='IntrospectionQuery', remediation='Disable introspection in production or restrict by role')
             # Trigger dynamic auth bypass check using the discovered schema
             self._check_dynamic_field_auth_bypass(endpoint, headers, jr['data']['__schema'])
+            # Check for deprecated field bypass
+            self._check_deprecated_field_bypass(endpoint, headers, jr['data']['__schema'])
         elif 'errors' in jr:
             # If errors mention introspection disabled, note as info
             errs = json.dumps(jr.get('errors'))[:300]
@@ -245,6 +254,47 @@ class GraphQLScanner(VulnTestingModule):
                              remediation='Ensure all sensitive object resolvers implement authorization checks.')
         except Exception:
             pass
+
+    def _check_deprecated_field_bypass(self, endpoint: str, headers: Dict, schema: Dict):
+        """
+        Identifies deprecated fields and attempts to query them to see if they bypass auth.
+        """
+        types = schema.get('types', [])
+        deprecated_probes = []
+        
+        for t in types:
+            if t.get('kind') == 'OBJECT':
+                for f in t.get('fields') or []:
+                    if f.get('isDeprecated'):
+                        field_name = f['name']
+                        type_name = t['name']
+                        # Heuristic: lowercase type name for the root field
+                        root_field = type_name[0].lower() + type_name[1:]
+                        deprecated_probes.append(f"  {root_field} {{ {field_name} }}")
+
+        if not deprecated_probes:
+            return
+
+        query = {"query": f"query DeprecatedFieldBypass {{\n{os.linesep.join(deprecated_probes[:3])}\n}}"}
+        resp = make_request(endpoint, method='POST', headers=headers, data=json.dumps(query), timeout=30)
+        
+        if resp.get('success'):
+            try:
+                jr = json.loads(resp.get('text') or '{}')
+                if jr.get('data') and any(v is not None for v in jr['data'].values()):
+                    self._report('GraphQL Deprecated Field Access', 'Medium', endpoint, 
+                                 evidence="Successfully queried deprecated fields.", 
+                                 payload=query['query'], 
+                                 remediation="Ensure authorization logic applies to all fields, including deprecated ones.")
+            except Exception:
+                pass
+
+    def _contains_sensitive_graphql_data(self, data: Dict) -> bool:
+        """Heuristically checks if GraphQL data contains sensitive patterns."""
+        sensitive_keywords = ['password', 'secret', 'token', 'key', 'email', 'ssn', 'creditCard', 'privateKey', 'admin', 'root']
+        data_str = json.dumps(data).lower()
+        return any(k in data_str for k in sensitive_keywords)
+
 
     def _check_alias_batching(self, endpoint: str, headers: Dict):
         # Heuristic: send many aliases and note if server handles as heavy uncontrolled batch

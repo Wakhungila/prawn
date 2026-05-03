@@ -9,23 +9,13 @@ __pycache__/
 .build/
 .dist/
 
-env/
-venv/
-.venv/
-
 # VSCode / IDE
 .vscode/
 .idea/
 *.swp
 
-# Logs and results
+# PRAWN Outputs and Research Data
 logs/
-results/
-output/
-knowledge/
-logs/
-
-# PRAWN Outputs
 results/
 output/
 knowledge/
@@ -49,10 +39,13 @@ target/
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Tooling
 coverage/
 htmlcov/
+.pytest_cache/
+.mypy_cache/
 pytest_cache/
 
 # Node/npm for UI assets if any
@@ -73,3 +66,7 @@ memory/*.db
 
 # Ignore any local config overrides
 config/local*.yaml
+
+# Virtual Environments
+venv/
+.venv/

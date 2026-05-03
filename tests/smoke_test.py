@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from prawn.core.models import ScanConfig
+from core.schemas import ScanConfig
 from core.engine import PrawnOrchestrator
 
 logging.basicConfig(level=logging.INFO)

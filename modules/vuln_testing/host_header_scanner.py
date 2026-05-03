@@ -7,12 +7,11 @@ from urllib.parse import urljoin, urlparse
 from core.base_module import VulnTestingModule
 from core.utils import make_http_request, generate_random_string
 
-class HostHeaderScanner(VulnerabilityTestingModule):
+class HostHeaderScanner(VulnTestingModule):
     """Host Header Injection vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self):
-        super().__init__(config)
-        self.name = "host_header_scanner"
+        super().__init__(name="host_header_scanner", description="Tests for Host Header Injection vulnerabilities")
         self.description = "Tests for Host Header Injection vulnerabilities"
         self.author = "PIN0CCHI0 Framework"
         self.references = [
@@ -68,7 +67,7 @@ class HostHeaderScanner(VulnerabilityTestingModule):
             
             if response:
                 # Check for reflected test domain
-                if test_domain in response.text:
+                if test_domain in response.get('text', ''):
                     return {
                         "type": "Host Header Injection",
                         "url": url,
@@ -80,7 +79,7 @@ class HostHeaderScanner(VulnerabilityTestingModule):
                     }
                 
                 # Check for redirect to injected domain
-                location = response.headers.get('location', '')
+                location = response.get('headers', {}).get('location', '')
                 if test_domain in location:
                     return {
                         "type": "Host Header Injection",

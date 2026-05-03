@@ -120,7 +120,7 @@ class InsecureDesignScanner(VulnTestingModule):
             return
         
         # Check response for insecure patterns
-        self.check_response_patterns(target, response, results)
+        self.check_response_patterns(target, response, results) # type: ignore
         
         # Extract and analyze links
         links = self.extract_links(response)
@@ -128,7 +128,7 @@ class InsecureDesignScanner(VulnTestingModule):
             if self.should_analyze_link(target, link):
                 link_response = make_request(link)
                 if link_response:
-                    self.check_response_patterns(link, link_response, results)
+                    self.check_response_patterns(link, link_response, results) # type: ignore
     
     def check_response_patterns(self, url, response, results):
         """Check response content for insecure design patterns."""
@@ -150,7 +150,7 @@ class InsecureDesignScanner(VulnTestingModule):
                     })
         
         # Check response content
-        content = response.text if hasattr(response, 'text') else str(response)
+        content = response.get('text', '')
         
         for pattern_name, pattern_info in self.insecure_patterns.items():
             matches = re.finditer(pattern_info["pattern"], content, re.IGNORECASE)
@@ -186,7 +186,7 @@ class InsecureDesignScanner(VulnTestingModule):
             login_url = self.join_url(target, path)
             response = make_request(login_url)
             
-            if response and response.status_code == 200:
+            if response and response.get('status_code') == 200:
                 # Check for lack of CAPTCHA or rate limiting headers
                 if not any(h.lower() in [h.lower() for h in response.headers] for h in ['x-rate-limit', 'retry-after']):
                     self.add_vulnerability(results, {
@@ -204,7 +204,7 @@ class InsecureDesignScanner(VulnTestingModule):
                     reset_url = self.join_url(target, reset_path)
                     reset_response = make_request(reset_url)
                     
-                    if reset_response and reset_response.status_code == 200:
+                    if reset_response and reset_response.get('status_code') == 200:
                         # Check for potential username enumeration
                         self.add_vulnerability(results, {
                             "type": "Insecure Design - Authentication",
@@ -227,7 +227,7 @@ class InsecureDesignScanner(VulnTestingModule):
             if response:
                 # If we can access it without authentication
                 if response.status_code == 200:
-                    self.add_vulnerability(results, {
+                    self.add_vulnerability(results, { # type: ignore
                         "type": "Insecure Design - Authorization",
                         "url": admin_url,
                         "evidence": f"Admin page accessible: {response.status_code}",
@@ -255,7 +255,7 @@ class InsecureDesignScanner(VulnTestingModule):
             cart_url = self.join_url(target, path)
             response = make_request(cart_url)
             
-            if response and response.status_code == 200:
+            if response and response.get('status_code') == 200:
                 # Look for price or quantity parameters
                 content = response.text
                 # Look for input fields that suggest price/quantity manipulation
@@ -293,7 +293,7 @@ class InsecureDesignScanner(VulnTestingModule):
                         })
                     
                     # Check for potential mass assignment
-                    if 'application/json' in response.headers.get('Content-Type', ''):
+                    if 'application/json' in response.get('headers', {}).get('Content-Type', ''):
                         try:
                             json_data = json.loads(content)
                             if isinstance(json_data, dict) and any(k in json_data for k in ['id', 'user_id', 'role', 'admin']):
@@ -311,7 +311,7 @@ class InsecureDesignScanner(VulnTestingModule):
     def extract_links(self, response):
         """Extract links from response."""
         links = []
-        if hasattr(response, 'text'):
+        if response.get('text'):
             # Extract href links
             href_links = re.findall(r'href=["\']([^"\']+)["\']', response.text)
             links.extend(href_links)

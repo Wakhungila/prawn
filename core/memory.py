@@ -121,14 +121,14 @@ _SCHEMA = [
         target_id INTEGER NOT NULL,
         context TEXT,            -- e.g., sqli|xss|idor
         payload_key TEXT NOT NULL,  -- key in library (hash/name)
-        waf_signature TEXT,       -- e.g., cloudflare|modsec|custom:403pattern
+        waf_signature TEXT NOT NULL DEFAULT '', -- e.g., cloudflare|modsec|custom:403pattern
         success_count INTEGER DEFAULT 0,
         failure_count INTEGER DEFAULT 0,
         blocked_count INTEGER DEFAULT 0,
         avg_latency_ms REAL,
         last_outcome TEXT,
         last_ts REAL,
-        UNIQUE(target_id, context, payload_key, IFNULL(waf_signature, '')),
+        UNIQUE(target_id, context, payload_key, waf_signature),
         FOREIGN KEY (target_id) REFERENCES targets(id)
     );
     """,
@@ -263,8 +263,8 @@ class MemoryStore:
         with self._conn:
             cur = self._conn.cursor()
             cur.execute(
-                "SELECT id, success_count, failure_count, blocked_count FROM payload_stats WHERE target_id=? AND context=? AND payload_key=? AND IFNULL(waf_signature,'')=IFNULL(?, '')",
-                (tid, context, payload_key, waf_signature)
+                "SELECT id, success_count, failure_count, blocked_count FROM payload_stats WHERE target_id=? AND context=? AND payload_key=? AND waf_signature=?",
+                (tid, context, payload_key, waf_signature or '')
             )
             row = cur.fetchone()
             if row:
@@ -284,7 +284,7 @@ class MemoryStore:
                     INSERT INTO payload_stats (target_id, context, payload_key, waf_signature, success_count, failure_count, blocked_count, avg_latency_ms, last_outcome, last_ts)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (tid, context, payload_key, waf_signature, 1 if success else 0, 0 if success else 1, 1 if (last_outcome or '').lower()=='blocked' else 0, latency_ms, last_outcome or ('success' if success else 'failure'), self._now())
+                    (tid, context, payload_key, waf_signature or '', 1 if success else 0, 0 if success else 1, 1 if (last_outcome or '').lower()=='blocked' else 0, latency_ms, last_outcome or ('success' if success else 'failure'), self._now())
                 )
 
     # --- Queries / Prioritization ---
@@ -292,6 +292,22 @@ class MemoryStore:
         tid = self._get_target_id(target)
         cur = self._conn.cursor()
         cur.execute("SELECT scan_id, started_ts, ended_ts, status FROM scans WHERE target_id=? ORDER BY started_ts DESC LIMIT ?", (tid, limit))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_all_scans(self, limit: int = 50) -> List[Dict[str, Any]]:
+        cur = self._conn.cursor()
+        cur.execute("""
+            SELECT s.scan_id as id, t.target, s.started_ts as start_time, s.ended_ts as end_time, s.status,
+            (SELECT COUNT(*) FROM findings f WHERE f.scan_id = s.scan_id) as vulnerability_count
+            FROM scans s
+            JOIN targets t ON s.target_id = t.id
+            ORDER BY s.started_ts DESC LIMIT ?
+        """, (limit,))
+        return [dict(r) for r in cur.fetchall()]
+
+    def get_all_findings(self) -> List[Dict[str, Any]]:
+        cur = self._conn.cursor()
+        cur.execute("SELECT * FROM findings ORDER BY timestamp DESC")
         return [dict(r) for r in cur.fetchall()]
 
     def get_endpoints(self, target: str) -> List[Dict[str, Any]]:
@@ -388,6 +404,37 @@ class AgentMemory:
     """High-level helper to manage persistent agent state and historical findings."""
     def __init__(self, store: Optional[MemoryStore] = None):
         self.store = store or MemoryStore()
+
+    def record_anomalies(self, anomalies: List[Anomaly], scan_id: Optional[str] = None) -> None:
+        for a in anomalies:
+            self.note_anomaly(a.target, scan_id or "", a.target, a.observation, a.confidence, a.metadata)
+
+    def record_findings(self, findings: List[Finding], scan_id: Optional[str] = None) -> None:
+        for f in findings:
+            self.store.record_finding(
+                target=f.target,
+                scan_id=scan_id,
+                module="mas_loop",
+                url=f.target,
+                params=f.metadata.get('params'),
+                severity=f.severity,
+                ftype=f.type,
+                title=f.description[:100],
+                evidence=f.evidence
+            )
+
+    def get_all_scans(self) -> List[Dict[str, Any]]:
+        return self.store.get_all_scans()
+
+    def get_all_findings_raw(self) -> Dict[str, Dict[str, Any]]:
+        all_f = self.store.get_all_findings()
+        res = {}
+        for f in all_f:
+            sid = f['scan_id'] or 'global'
+            if sid not in res:
+                res[sid] = {'vulnerabilities': []}
+            res[sid]['vulnerabilities'].append(f)
+        return res
 
     def remember_endpoints(self, target: str, discovered: List[str]) -> None:
         for u in discovered or []:

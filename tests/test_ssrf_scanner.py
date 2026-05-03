@@ -11,17 +11,10 @@ from modules.vuln_testing.ssrf_scanner import SSRFScanner
 class TestSSRFScanner(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock configuration
-        self.config = {
-            'output_dir': './test_results',
-            'callbacks': {
-                'domain': 'example.com'
-            }
-        }
-        
         # Create the scanner with the mock configuration
-        self.scanner = SSRFScanner()
-        self.scanner.config = self.config
+        self.scanner = SSRFScanner() # No config needed in constructor now
+        self.scanner.config = {'output_dir': './test_results'} # Set config after init
+        self.scanner.target = "http://example.com" # Set a default target for tests
         
     @patch('modules.vuln_testing.ssrf_scanner.make_request')
     def test_check_ssrf_indicators(self, mock_make_request):

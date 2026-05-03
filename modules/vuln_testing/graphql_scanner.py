@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-GraphQL Scanner Module for PIN0CCHI0
+GraphQL Scanner Module for PRAWN
 
 Performs safe checks against GraphQL endpoints:
 - Endpoint discovery (common paths)
@@ -25,7 +25,7 @@ from typing import List, Dict
 from core.base_module import VulnTestingModule
 from core.utils import make_request, ensure_dir_exists, save_json
 
-logger = logging.getLogger('pin0cchi0.vuln_testing.graphql_scanner')
+logger = logging.getLogger('prawn.vuln_testing.graphql_scanner')
 
 INTROSPECTION_QUERY = {
     "query": """
@@ -87,13 +87,34 @@ ALIAS_BATCH_QUERY = {
     """
 }
 
+# A deeply nested query to test for depth limit bypass.
+DEPTH_BYPASS_QUERY = {
+    "query": """
+    query DepthLimitBypass {
+      __schema {
+        types {
+          possibleTypes {
+            possibleTypes {
+              possibleTypes {
+                possibleTypes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+}
+
 class GraphQLScanner(VulnTestingModule):
     def __init__(self):
         super().__init__()
         self.name = 'graphql_scanner'
         self.description = 'Detects GraphQL endpoints and common misconfigurations'
         self.category = 'vuln_testing'
-        self.author = 'PIN0CCHI0'
+        self.author = 'PRAWN'
         self.version = '0.1.0'
         self.vulnerabilities: List[Dict] = []
 
@@ -124,6 +145,8 @@ class GraphQLScanner(VulnTestingModule):
                 self._check_depth_complexity(ep, headers)
                 # Alias batching heuristic
                 self._check_alias_batching(ep, headers)
+                # Depth limit bypass check
+                self._check_depth_limit_bypass(ep, headers)
 
         # Save results (optional)
         out_dir = ensure_dir_exists(os.path.join('results', 'vuln_testing'))
@@ -149,8 +172,11 @@ class GraphQLScanner(VulnTestingModule):
             jr = json.loads(text)
         except Exception:
             jr = {}
+            
         if isinstance(jr, dict) and 'data' in jr and isinstance(jr['data'], dict) and '__schema' in jr['data']:
             self._report('GraphQL Introspection Enabled', 'High', endpoint, evidence='__schema present in response', payload='IntrospectionQuery', remediation='Disable introspection in production or restrict by role')
+            # Trigger dynamic auth bypass check using the discovered schema
+            self._check_dynamic_field_auth_bypass(endpoint, headers, jr['data']['__schema'])
         elif 'errors' in jr:
             # If errors mention introspection disabled, note as info
             errs = json.dumps(jr.get('errors'))[:300]
@@ -170,6 +196,55 @@ class GraphQLScanner(VulnTestingModule):
             body_len = len(heavy.get('text') or '')
             if dt > 5 or body_len > 200000:
                 self._report('GraphQL Depth/Complexity Controls Missing (Heuristic)', 'Medium', endpoint, evidence=f'Latency {dt:.2f}s, size {body_len} bytes', payload='Nested schema query', remediation='Enforce query depth/complexity limits or cost analysis')
+
+    def _check_depth_limit_bypass(self, endpoint: str, headers: Dict):
+        """Tests if the server processes a deeply nested query that should typically be blocked."""
+        resp = make_request(endpoint, method='POST', headers=headers, data=json.dumps(DEPTH_BYPASS_QUERY), timeout=40)
+        if not resp.get('success'):
+            return
+        
+        # If the server processes a query this deep with a 200 OK, it's likely vulnerable to DoS via depth exhaustion
+        if resp.get('status_code') == 200 and "data" in (resp.get('text') or ""):
+            self._report('GraphQL Query Depth Limit Bypass', 'High', endpoint, evidence='Deeply nested query accepted', payload='DEPTH_BYPASS_QUERY', remediation='Implement strict query depth limiting in the GraphQL middleware')
+
+    def _check_dynamic_field_auth_bypass(self, endpoint: str, headers: Dict, schema: Dict):
+        """
+        Analyzes the discovered schema to find sensitive types and builds a dynamic probe.
+        """
+        types = schema.get('types', [])
+        sensitive_keywords = ['user', 'admin', 'vault', 'secret', 'key', 'auth', 'profile', 'email', 'phone', 'role', 'token']
+        
+        # Find types that look sensitive
+        interesting_types = [t for t in types if any(k in t.get('name', '').lower() for k in sensitive_keywords) and t.get('kind') == 'OBJECT']
+        
+        if not interesting_types:
+            return
+
+        # Build a query targeting the first few fields of the first few sensitive objects
+        query_parts = []
+        for t in interesting_types[:3]:
+            type_name = t['name']
+            # In a real scenario, we'd need to find the Query root field that returns this type.
+            # Here we use a common heuristic: lowercase type name
+            field_name = type_name[0].lower() + type_name[1:]
+            query_parts.append(f"  {field_name} {{ __typename }}")
+
+        dynamic_query = {"query": f"query DynamicAuthProbe {{\n{os.linesep.join(query_parts)}\n}}"}
+        
+        resp = make_request(endpoint, method='POST', headers=headers, data=json.dumps(dynamic_query), timeout=30)
+        if not resp.get('success'):
+            return
+
+        try:
+            jr = json.loads(resp.get('text') or '{}')
+            data = jr.get('data', {})
+            if data and any(v is not None for v in data.values()):
+                self._report('GraphQL Field-Level Authorization Bypass', 'Critical', endpoint, 
+                             evidence=f"Discovered types {list(data.keys())} returned data without auth", 
+                             payload=dynamic_query['query'], 
+                             remediation='Ensure all sensitive object resolvers implement authorization checks.')
+        except Exception:
+            pass
 
     def _check_alias_batching(self, endpoint: str, headers: Dict):
         # Heuristic: send many aliases and note if server handles as heavy uncontrolled batch

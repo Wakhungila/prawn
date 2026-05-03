@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Tool Checker for PIN0CCHI0
+Tool Checker for PRAWN
 
 Detects presence and versions of external tools used by the framework and provides
 installation guidance links. This helps the autonomous agent adapt to the runtime
@@ -18,10 +18,13 @@ import re
 import shutil
 import logging
 from typing import Dict, Any, List, Optional
+import argparse
+from rich.console import Console
+from rich.table import Table
 
 from core.utils import run_command
 
-logger = logging.getLogger('PIN0CCHI0.ToolChecker')
+logger = logging.getLogger('PRAWN.ToolChecker')
 
 ToolSpec = Dict[str, Any]
 
@@ -71,6 +74,12 @@ TOOLS: List[ToolSpec] = [
 
     # Nuclei (deep vuln scanning)
     {"name": "nuclei", "cmd": "nuclei", "ver": ["-version"], "url": "https://github.com/projectdiscovery/nuclei"},
+
+    # Elite Web3 Fuzzing & Dev Tools
+    {"name": "forge", "cmd": "forge", "ver": ["--version"], "url": "https://book.getfoundry.sh/"},
+    {"name": "echidna", "cmd": "echidna", "ver": ["--version"], "url": "https://github.com/crytic/echidna"},
+    {"name": "wake", "cmd": "wake", "ver": ["--version"], "url": "https://github.com/Ackee-Blockchain/wake"},
+    {"name": "medusa", "cmd": "medusa", "ver": ["--version"], "url": "https://github.com/crytic/medusa"},
 ]
 
 DEPRECATED_TOOLS = [
@@ -119,10 +128,10 @@ def check_tool(spec: ToolSpec) -> Dict[str, Any]:
     try:
         ver_cmd = " ".join([cmd] + args)
         result = run_command(ver_cmd)
-        if result.get('success'):
-            out = (result.get('stdout') or '') + "\n" + (result.get('stderr') or '')
+        out = (result.get('stdout') or '') + "\n" + (result.get('stderr') or '')
+        if result.get('success') or out.strip():
             status['present'] = True
-            status['version'] = _parse_version(out) or out.strip().splitlines()[0:1][0] if out.strip() else None
+            status['version'] = _parse_version(out) or (out.strip().splitlines()[0] if out.strip() else None)
         else:
             status['present'] = True  # present on PATH but version query failed; still usable
             status['version'] = None
@@ -131,6 +140,26 @@ def check_tool(spec: ToolSpec) -> Dict[str, Any]:
         status['version'] = None
 
     return status
+
+
+def run_fix() -> bool:
+    """Execute the setup.sh script to automatically resolve missing dependencies."""
+    script_path = os.path.join('scripts', 'setup.sh')
+    if not os.path.exists(script_path):
+        # Fallback to current dir if running from root without proper structure
+        script_path = 'setup.sh'
+
+    logger.info(f"🦐 PRAWN attempting one-click fix using {script_path}...")
+    
+    try:
+        # Ensure script is executable
+        os.chmod(script_path, 0o755)
+        # Run the installer with a 30 minute timeout for Go builds
+        result = run_command(f"bash {script_path}", timeout=1800)
+        return result.get('success', False)
+    except Exception as e:
+        logger.error(f"Failed to execute setup script: {e}")
+        return False
 
 
 def check_all_tools() -> Dict[str, Any]:
@@ -153,26 +182,39 @@ def check_all_tools() -> Dict[str, Any]:
     return report
 
 
-def pretty_report(report: Dict[str, Any]) -> str:
-    lines = []
-    lines.append("Recommended Tools Status:\n")
+def print_rich_report(report: Dict[str, Any]):
+    console = Console()
+    table = Table(title="[bold magenta]PRAWN Tool Inventory[/]", box=None)
+    table.add_column("Tool", style="cyan")
+    table.add_column("Status")
+    table.add_column("Version", style="dim")
+    table.add_column("Source", style="blue")
+
     for t in report.get('tools', []):
-        status = "OK" if t['present'] else "MISSING"
-        ver = t['version'] or ""
-        url = t.get('url') or ""
-        lines.append(f"- {t['name']:<18} [{status}]  {ver}  {url}")
-    lines.append("")
-    if report.get('deprecated'):
-        lines.append("Deprecated:")
-        for d in report['deprecated']:
-            lines.append(f"- {d['name']}: {d['reason']}")
-    lines.append("")
-    s = report.get('summary', {})
-    lines.append(f"Summary: {s.get('present', 0)} present, {s.get('missing', 0)} missing")
-    return "\n".join(lines)
+        status = "[green]OK[/]" if t['present'] else "[red]MISSING[/]"
+        table.add_row(t['name'], status, t['version'] or "-", t['url'] or "")
+
+    console.print(table)
+    s = report['summary']
+    console.print(f"\n[bold magenta]Inventory Summary:[/] [green]{s['present']} present[/], [red]{s['missing']} missing[/]\n")
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='PRAWN Tool Checker')
+    parser.add_argument('--fix', action='store_true', help='Automatically run scripts/setup.sh for missing tools')
+    args = parser.parse_args()
+
     logging.basicConfig(level=logging.INFO)
     rep = check_all_tools()
-    print(pretty_report(rep))
+    print_rich_report(rep)
+    
+    if rep['summary']['missing'] > 0:
+        if args.fix:
+            run_fix()
+        else:
+            try:
+                choice = input("\nMissing tools detected. Run one-click fix? [y/N]: ").lower()
+                if choice == 'y':
+                    run_fix()
+            except (KeyboardInterrupt, EOFError):
+                pass

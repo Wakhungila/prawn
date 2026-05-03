@@ -28,7 +28,7 @@ class TestAccessControlScanner(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        self.scanner = AccessControlScanner()
+        self.scanner = AccessControlScanner() # No config needed in constructor now
         self.scanner.target = "http://example.com"
         self.scanner.config = {}
         self.scanner.results_dir = "./test_results"

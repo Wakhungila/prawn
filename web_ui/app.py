@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-PIN0CCHI0 Web UI Application
+PRAWN Web UI Application
 
-This module provides a web interface for the PIN0CCHI0 security testing framework,
+This module provides a web interface for the PRAWN security research framework,
 similar to XBOW, allowing users to visualize scan progress and results.
 """
 
@@ -22,10 +22,11 @@ import requests
 # Add the parent directory to the path so we can import the PIN0CCHI0 modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.engine import Engine
 from core.config_manager import ConfigManager
 from core.module_manager import ModuleManager
-from core.memory import AgentContext
+from core.memory import AgentMemory
+from core.ollama_client import OllamaClient
+from core.tool_checker import check_all_tools, run_fix
 from core.utils import (
     set_manual_proxy,
     get_manual_proxy,
@@ -35,9 +36,12 @@ from core.utils import (
     generate_curl_from_entry,
 )
 
+from core.engine import PrawnOrchestrator # Import here to avoid circular dependency with tool_checker
+from core.schemas import ScanConfig
+
 # Configure logger
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('pin0cchi0.web_ui')
+logger = logging.getLogger('prawn.web_ui')
 
 # Initialize Flask application
 app = Flask(__name__)
@@ -88,17 +92,25 @@ active_scans = {}
 scan_results = {}
 scan_logs = {}
 engine = None
-memory_ctx = AgentContext()
+memory_ctx = AgentMemory()
+
+# Initialize the AI Client
+ai_client = OllamaClient(model=OLLAMA_MODEL, base_url=OLLAMA_BASE_URL)
 
 @app.route('/')
 def index():
     """Render the main dashboard page."""
     return render_template('index.html')
 
+@app.route('/system_health')
+def system_health():
+    """Render the system health page."""
+    return render_template('system_health.html')
+
 @app.route('/scans')
 def scans():
     """Render the scans page. Use index template which lists scans via API."""
-    return render_template('index.html')
+    return render_template('scans.html')
 
 @app.route('/scan/<scan_id>')
 def scan_detail(scan_id):
@@ -150,7 +162,7 @@ def vulnerabilities():
     )
 
 @app.route('/api/start_scan', methods=['POST'])
-def start_scan():
+async def start_scan():
     """API endpoint to start a new scan."""
     data = request.json
     target = data.get('target')
@@ -161,7 +173,7 @@ def start_scan():
         return jsonify({'success': False, 'error': 'Target is required'})
     
     # Generate a unique scan ID
-    scan_id = f"{int(time.time())}-{target.replace('://', '-').replace('/', '-')}"
+    scan_id = f"scan-{int(time.time())}-{target.replace('://', '-').replace('/', '-').replace('.', '-')}"
     
     # Create scan configuration
     scan_config = {
@@ -170,6 +182,9 @@ def start_scan():
         'options': options,
         'output_dir': os.path.join('results', scan_id)
     }
+
+    # Ensure output directory exists
+    os.makedirs(scan_config['output_dir'], exist_ok=True)
     
     # Initialize the scan in active_scans
     active_scans[scan_id] = {
@@ -184,7 +199,7 @@ def start_scan():
     }
     
     # Start the scan in a separate thread
-    scan_thread = threading.Thread(target=run_scan, args=(scan_id, scan_config))
+    scan_thread = threading.Thread(target=lambda: asyncio.run(run_scan(scan_id, scan_config)))
     scan_thread.daemon = True
     scan_thread.start()
     
@@ -214,10 +229,10 @@ def get_scan_results(scan_id):
     return jsonify({'success': False, 'error': 'Scan results not found'})
 
 @app.route('/api/scans')
-def api_scans():
-    """API endpoint to list active scans."""
+async def api_scans():
+    """API endpoint to list active and recent scans."""
     try:
-        return jsonify({'success': True, 'scans': list(active_scans.values())})
+        return jsonify({'success': True, 'active_scans': list(active_scans.values()), 'recent_scans': memory_ctx.get_all_scans()})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -225,7 +240,7 @@ def api_scans():
 def api_vulnerabilities():
     """API endpoint to list recent vulnerabilities across all scans."""
     all_vulns = []
-    for scan_id, results in scan_results.items():
+    for scan_id, results in memory_ctx.get_all_findings_raw().items(): # Fetch from memory
         vulns = results.get('vulnerabilities', []) if isinstance(results, dict) else []
         for v in vulns:
             item = dict(v)
@@ -467,6 +482,24 @@ def ai_command():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/system_health')
+def api_system_health():
+    """API endpoint to get the tool check report."""
+    try:
+        report = check_all_tools()
+        return jsonify({'success': True, 'report': report})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/system_fix', methods=['POST'])
+def api_system_fix():
+    """API endpoint to trigger the automated tool setup."""
+    try:
+        success = run_fix()
+        return jsonify({'success': success})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 # Optional Burp API wrappers
 @app.route('/api/burp/scan', methods=['POST'])
 def api_burp_scan():
@@ -515,45 +548,19 @@ def ai_chat():
         data = request.get_json(force=True) or {}
         prompt = (data.get('message') or '').strip()
         history = data.get('history') or []  # list of {role:'user'|'assistant', content:'...'}
-        model = data.get('model') or OLLAMA_MODEL
+        
         if not prompt:
             return jsonify({'success': False, 'error': 'No message provided'}), 400
 
-        # Build messages array
-        messages = []
-        try:
-            for h in history:
-                r = 'assistant' if (h.get('role') or '').lower() == 'assistant' else 'user'
-                c = str(h.get('content') or '')
-                if c:
-                    messages.append({'role': r, 'content': c})
-        except Exception:
-            pass
-        messages.append({'role': 'user', 'content': prompt})
-
-        headers = {'Content-Type': 'application/json'}
-        if OLLAMA_API_KEY:
-            headers['Authorization'] = f'Bearer {OLLAMA_API_KEY}'
-        payload = {
-            'model': model,
-            'messages': messages,
-            'stream': False,
-        }
-        resp = requests.post(f"{OLLAMA_BASE_URL}/api/chat", headers=headers, json=payload, timeout=60)
-        if resp.status_code >= 400:
-            return jsonify({'success': False, 'error': f'Ollama error {resp.status_code}: {resp.text[:300]}'})
-        jr = resp.json()
-        # Try to extract assistant content (Ollama chat format)
-        content = ''
-        try:
-            msg = jr.get('message') or {}
-            content = msg.get('content') or ''
-        except Exception:
-            pass
-        if not content:
-            # Fallback to /api/generate-like response
-            content = jr.get('response') or ''
-        return jsonify({'success': True, 'reply': content, 'model': model})
+        # Use the centralized OllamaClient for conversation
+        context_history = "\n".join([f"{h['role']}: {h['content']}" for h in history])
+        full_prompt = f"{context_history}\nuser: {prompt}"
+        
+        import asyncio
+        reply = asyncio.run(ai_client.generate_text(full_prompt))
+        
+        return jsonify({'success': True, 'reply': reply, 'model': OLLAMA_MODEL})
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -568,7 +575,7 @@ def handle_disconnect():
     logger.info('Client disconnected')
 
 def run_scan(scan_id, config):
-    """Run a scan with the given configuration."""
+    """Run a scan with the given configuration (async wrapper)."""
     global engine
     global scan_logs
     
@@ -578,19 +585,16 @@ def run_scan(scan_id, config):
         active_scans[scan_id]['status'] = 'running'
         socketio.emit('scan_update', {'scan_id': scan_id, 'status': 'running'})
         
-        # Initialize the engine if not already done
-        if engine is None:
-            config_manager = ConfigManager()
-            module_manager = ModuleManager(config_manager)
-            engine = Engine(config_manager, module_manager)
-        
-        # Configure the engine for this scan
-        engine.config.update(config)
-        # Ensure scan_id is available in engine config for downstream consumers
-        try:
-            engine.config['scan_id'] = scan_id
-        except Exception:
-            pass
+        # Build the Pydantic ScanConfig
+        scan_cfg = ScanConfig(
+            target=config.get('target'),
+            output_dir=config.get('output_dir'),
+            zero_day_mode=config.get('options', {}).get('zero_day_mode', False),
+            web3_enabled=config.get('options', {}).get('web3_enabled', False),
+            economic_threat_model=config.get('options', {}).get('economic_threat_model', False),
+            ollama_model=OLLAMA_MODEL,
+            max_recursion_depth=config.get('options', {}).get('max_recursion_depth', 2)
+        )
 
         # Record scan start in persistent memory
         try:
@@ -618,8 +622,8 @@ def run_scan(scan_id, config):
         # Register vulnerability callback
         def vulnerability_callback(vulnerability):
             if scan_id not in scan_results:
-                scan_results[scan_id] = {'vulnerabilities': []}
-            scan_results[scan_id]['vulnerabilities'].append(vulnerability)
+                scan_results[scan_id] = {'findings': []} # Use 'findings' to match AgentOutput
+            scan_results[scan_id]['findings'].append(vulnerability)
             # Append to scan log
             try:
                 sev = vulnerability.get('severity', 'Info') if isinstance(vulnerability, dict) else 'Info'
@@ -637,14 +641,14 @@ def run_scan(scan_id, config):
                 'vulnerability': vulnerability
             })
         
-        # Set callbacks
-        engine.set_callback('progress', progress_callback)
-        engine.set_callback('vulnerability', vulnerability_callback)
-        
-        # Run the scan
-        active_scans[scan_id]['total_modules'] = len(engine.module_manager.get_modules())
-        result = engine.run()
-        
+        orchestrator = PrawnOrchestrator(scan_cfg)
+        orchestrator._callbacks['progress'] = lambda p: progress_callback("MAS Loop", p, "Agent Thinking...")
+        orchestrator._callbacks['vulnerability'] = vulnerability_callback
+
+        # Run the multi-agent research loop
+        import asyncio
+        result = asyncio.run(orchestrator.execute_research())
+
         # Update scan results
         scan_results[scan_id] = result
         
@@ -687,11 +691,11 @@ def main():
     os.makedirs('results', exist_ok=True)
     
     # Run the Flask application
-    host = os.environ.get('PIN0CCHI0_HOST', '0.0.0.0')
-    port = int(os.environ.get('PIN0CCHI0_PORT', 5000))
-    debug = os.environ.get('PIN0CCHI0_DEBUG', 'False').lower() == 'true'
+    host = os.environ.get('PRAWN_HOST', '127.0.0.1') # Changed to 127.0.0.1 for better default security
+    port = int(os.environ.get('PRAWN_PORT', 5000)) 
+    debug = os.environ.get('PRAWN_DEBUG', 'False').lower() == 'true' # Use 'False' as default for production
     
-    socketio.run(app, host=host, port=port, debug=debug)
+    socketio.run(app, host=host, port=port, debug=debug, allow_unsafe_werkzeug=True) # allow_unsafe_werkzeug for debug=True
 
 if __name__ == '__main__':
     main()

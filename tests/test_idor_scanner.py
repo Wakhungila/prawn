@@ -16,10 +16,8 @@ class TestIDORScanner(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        self.test_config = {
-            'target': 'http://example.com'
-        }
-        self.scanner = IDORScanner(self.test_config)
+        self.scanner = IDORScanner() # No config needed in constructor now
+        self.scanner.config = {'target': 'http://example.com'} # Set config after init
 
     def test_initialization(self):
         """Test that the scanner initializes correctly."""

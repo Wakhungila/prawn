@@ -1,6 +1,0 @@
-{
-    "target": "https://dealfront.com",
-    "discovered_paths": [],
-    "wordlist": "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
-    "extensions": "php,html,js,txt"
-}

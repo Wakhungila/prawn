@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Persistent agent memory and prioritization for PIN0CCHI0
+Persistent agent memory and prioritization for PRAWN
 
 This module provides a SQLite-backed MemoryStore and a high-level AgentContext
 that the engine can use to:
@@ -27,7 +27,7 @@ import sqlite3
 import threading
 from typing import Any, Dict, List, Optional, Tuple
 
-_DEFAULT_DB = os.path.join('memory', 'pin0cchi0.sqlite3')
+_DEFAULT_DB = os.path.join('memory', 'prawn.sqlite3')
 
 _SCHEMA = [
     # Targets catalog
@@ -384,8 +384,8 @@ class MemoryStore:
             })
         return out
 
-class AgentContext:
-    """High-level helper to drive planning and adaptive payload selection."""
+class AgentMemory:
+    """High-level helper to manage persistent agent state and historical findings."""
     def __init__(self, store: Optional[MemoryStore] = None):
         self.store = store or MemoryStore()
 

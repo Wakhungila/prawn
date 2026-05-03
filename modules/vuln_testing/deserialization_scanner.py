@@ -10,7 +10,7 @@ import yaml
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
 
-class DeserializationScanner(VulnerabilityTestingModule):
+class DeserializationScanner(VulnTestingModule):
     """Insecure Deserialization vulnerability scanner module for PIN0CCHI0."""
 
     def __init__(self, config: Dict):

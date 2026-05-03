@@ -2,20 +2,20 @@
 # -*- coding: utf-8 -*-
 
 """
-PIN0CCHI0 Configuration Manager
+PRAWN Configuration Manager
 
 This module handles loading, validating, and providing access to configuration settings
-for the PIN0CCHI0 framework.
+for the PRAWN framework.
 """
 
 import os
 import yaml
 import logging
 
-logger = logging.getLogger('PIN0CCHI0.ConfigManager')
+logger = logging.getLogger('PRAWN.ConfigManager')
 
 class ConfigManager:
-    """Configuration manager for PIN0CCHI0."""
+    """Configuration manager for PRAWN."""
     
     def __init__(self, config_file=None):
         """
@@ -48,7 +48,7 @@ class ConfigManager:
             'general': {
                 'threads': 10,
                 'timeout': 30,
-                'user_agent': 'PIN0CCHI0/0.1.0',
+                'user_agent': 'PRAWN/0.1.0',
                 'verbose': False
             },
             'recon': {

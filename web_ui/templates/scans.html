@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% set title = "Scans" %}
+
+{% block content %}
+<h2 class="mb-4">All Research Sessions</h2>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <i class="fas fa-spinner fa-spin me-2"></i> Active Sessions
+    </div>
+    <div class="card-body" id="active-scans-container">
+        <div class="text-center text-muted py-4">No active sessions</div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-secondary text-white">
+        <i class="fas fa-history me-2"></i> Completed Sessions
+    </div>
+    <div class="card-body" id="recent-scans-container">
+        <div class="text-center text-muted py-4">No completed sessions</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // This page will reuse the updateActiveScansUI and updateRecentScansUI from main.js
+        // but will fetch all scans, not just a limited set for the dashboard.
+        // We need to ensure main.js's loadDashboardData is called or adapt it.
+        
+        // For now, we can trigger a fetch specifically for this page
+        fetch('/api/scans')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    activeScanData = data.active_scans;
+                    recentScans = data.recent_scans;
+                    updateActiveScansUI();
+                    updateRecentScansUI();
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching all scans:', error);
+            });
+    });
+</script>
+{% endblock %}

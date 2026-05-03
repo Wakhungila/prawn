@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import re
 import time
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup # type: ignore
 from urllib.parse import urljoin, urlparse
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
@@ -12,7 +12,7 @@ from core.utils import make_http_request, generate_random_string
 class AuthScanner(VulnerabilityTestingModule):
     """Authentication and Session Management vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "auth_scanner"
         self.description = "Tests for authentication and session management vulnerabilities"

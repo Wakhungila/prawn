@@ -22,12 +22,22 @@ venv/
 logs/
 results/
 output/
+knowledge/
+logs/
+
+# PRAWN Outputs
+results/
+output/
+knowledge/
 *.log
 
 # Cache / temp
 *.cache/
 .cache/
 .tmp/
+
+# Rust / Build Artifacts
+target/
 
 # Environment / secrets
 .env
@@ -47,6 +57,11 @@ pytest_cache/
 
 # Node/npm for UI assets if any
 node_modules/
+
+# Foundry / Smart Contracts
+out/
+cache/
+broadcast/
 
 # HAR and evidence dumps
 *.har

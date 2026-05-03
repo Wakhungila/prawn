@@ -4,13 +4,13 @@ from typing import Dict, List, Optional, Set
 import requests
 import re
 from urllib.parse import urljoin, urlparse
-from core.base_module import VulnerabilityTestingModule
+from core.base_module import VulnTestingModule
 from core.utils import make_http_request, generate_random_string
 
 class HostHeaderScanner(VulnerabilityTestingModule):
     """Host Header Injection vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "host_header_scanner"
         self.description = "Tests for Host Header Injection vulnerabilities"

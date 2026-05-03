@@ -1,3 +1,7 @@
+# Hybrid Build System
+maturin>=1.4.0
+pyo3-build-config>=0.20.0
+
 # Core dependencies
 requests>=2.28.1
 beautifulsoup4>=4.11.1

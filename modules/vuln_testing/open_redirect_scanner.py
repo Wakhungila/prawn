@@ -4,14 +4,14 @@ from typing import Dict, List, Optional, Set
 import requests
 import re
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, parse_qs, quote
+from urllib.parse import urljoin, urlparse, parse_qs, quote, urlencode
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
 
 class OpenRedirectScanner(VulnerabilityTestingModule):
     """Open Redirect vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "open_redirect_scanner"
         self.description = "Tests for Open Redirect vulnerabilities"

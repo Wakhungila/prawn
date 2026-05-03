@@ -1,448 +1,263 @@
-{% extends "base.html" %}
-
-{% block title %}Scan Details - PIN0CCHI0{% endblock %}
+{% extends "layout.html" %}
+{% set title = "Scan Detail" %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-12 mb-4">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('scans') }}">Scans</a></li>
-                <li class="breadcrumb-item active" aria-current="page">Scan Details</li>
-            </ol>
-        </nav>
-    </div>
-</div>
+<h2 class="mb-4">Research Session Details: <span id="scan-detail-target">Loading...</span></h2>
 
 <div class="row">
-    <div class="col-md-12 mb-4">
-        <div class="card">
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-search me-2"></i>Scan Details: {{ scan.target }}
-                </h5>
+                <i class="fas fa-info-circle me-2"></i> Session Overview
             </div>
             <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <table class="table table-bordered">
-                            <tr>
-                                <th>Scan ID</th>
-                                <td>{{ scan.id }}</td>
-                            </tr>
-                            <tr>
-                                <th>Target</th>
-                                <td>{{ scan.target }}</td>
-                            </tr>
-                            <tr>
-                                <th>Scan Type</th>
-                                <td>{{ scan.scan_type }}</td>
-                            </tr>
-                            <tr>
-                                <th>Start Time</th>
-                                <td>{{ scan.start_time }}</td>
-                            </tr>
-                            <tr>
-                                <th>End Time</th>
-                                <td>{{ scan.end_time if scan.end_time else 'N/A' }}</td>
-                            </tr>
-                            <tr>
-                                <th>Status</th>
-                                <td>
-                                    {% if scan.status == 'running' %}
-                                        <span class="badge bg-info">Running</span>
-                                    {% elif scan.status == 'completed' %}
-                                        <span class="badge bg-success">Completed</span>
-                                    {% elif scan.status == 'error' %}
-                                        <span class="badge bg-danger">Error</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">{{ scan.status }}</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card h-100">
-                            <div class="card-header bg-info text-white">
-                                <h6 class="card-title mb-0">Scan Progress</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="progress mb-3">
-                                    <div class="progress-bar" role="progressbar" style="width: {{ scan.progress|default(0) }}%" aria-valuenow="{{ scan.progress|default(0) }}" aria-valuemin="0" aria-valuemax="100">{{ scan.progress|default(0) }}%</div>
-                                </div>
-                                
-                                <div id="current-module-info">
-                                    {% if scan.status == 'running' %}
-                                        <p><strong>Current Module:</strong> <span id="current-module">{{ scan.current_module }}</span></p>
-                                        <p><strong>Status:</strong> <span id="status-message">{{ scan.status_message }}</span></p>
-                                    {% endif %}
-                                </div>
-                                
-                                <div class="mt-3">
-                                    {% if scan.status == 'running' %}
-                                        <button id="stop-scan" class="btn btn-danger" data-scan-id="{{ scan.id }}">
-                                            <i class="fas fa-stop me-1"></i> Stop Scan
-                                        </button>
-                                    {% endif %}
-                                    
-                                    {% if scan.status == 'completed' %}
-                                        <a href="/api/report/{{ scan.id }}" class="btn btn-success">
-                                            <i class="fas fa-file-pdf me-1"></i> Download Report
-                                        </a>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <p><strong>Scan ID:</strong> <code id="scan-detail-id"></code></p>
+                <p><strong>Target:</strong> <span id="scan-detail-target-full"></span></p>
+                <p><strong>Status:</strong> <span id="scan-detail-status" class="badge"></span></p>
+                <p><strong>Progress:</strong> <span id="scan-detail-progress"></span>%</p>
+                <div class="progress mb-3">
+                    <div id="scan-detail-progress-bar" class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
+                <p><strong>Started:</strong> <span id="scan-detail-start-time"></span></p>
+                <p><strong>Ended:</strong> <span id="scan-detail-end-time"></span></p>
+                <p><strong>Vulnerabilities Found:</strong> <span id="scan-detail-vuln-count" class="text-danger fw-bold">0</span></p>
+                <button class="btn btn-danger stop-scan-btn" data-scan-id="" id="scan-detail-stop-btn"><i class="fas fa-stop me-2"></i> Stop Session</button>
             </div>
         </div>
     </div>
-</div>
-
-<div class="row">
-    <div class="col-md-12 mb-4">
-        <div class="card">
-            <div class="card-header bg-danger text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-bug me-2"></i>Vulnerabilities
-                </h5>
-            </div>
-            <div class="card-body">
-                <div id="vulnerabilities-container">
-                    <div class="text-center py-4" id="no-vulnerabilities">
-                        <i class="fas fa-shield-alt fa-3x mb-3 text-muted"></i>
-                        <p class="text-muted">No vulnerabilities found</p>
-                    </div>
-                    <div id="vulnerabilities-list" class="d-none">
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Type</th>
-                                    <th>URL</th>
-                                    <th>Severity</th>
-                                    <th>Parameter</th>
-                                    <th>Details</th>
-                                    <th>Evidence</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Vulnerabilities will be populated here via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-12 mb-4">
-        <div class="card">
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
             <div class="card-header bg-secondary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-clipboard-list me-2"></i>Scan Log
-                </h5>
+                <i class="fas fa-terminal me-2"></i> Session Log
             </div>
-            <div class="card-body">
-                <div id="scan-log-container">
-                    <div class="text-center py-4" id="no-scan-log">
-                        <i class="fas fa-file-alt fa-3x mb-3 text-muted"></i>
-                        <p class="text-muted">No log entries available</p>
-                    </div>
-                    <div id="scan-log" class="d-none">
-                        <pre class="bg-dark text-light p-3 rounded" style="max-height: 400px; overflow-y: auto;"><!-- Log entries will be populated here via JavaScript --></pre>
-                    </div>
-                </div>
+            <div class="card-body bg-dark text-white" style="height: 300px; overflow-y: scroll;" id="scan-detail-log">
+                <!-- Log entries will be appended here -->
             </div>
         </div>
-        
-        <!-- Scan Evidence Modal -->
-        <div class="modal fade" id="scanEvidenceModal" tabindex="-1" aria-labelledby="scanEvidenceModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-        <div class="modal-header bg-info text-white">
-        <h5 class="modal-title" id="scanEvidenceModalLabel">Request/Response Evidence</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-        <div class="mb-3">
-        <h6>Request</h6>
-        <pre id="scan-evidence-req" class="bg-dark text-light p-3 rounded" style="max-height: 250px; overflow:auto;"></pre>
-        </div>
-        <div>
-        <h6>Response</h6>
-        <pre id="scan-evidence-resp" class="bg-dark text-light p-3 rounded" style="max-height: 350px; overflow:auto;"></pre>
-        </div>
-        </div>
-        <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="copy-curl-scan">Copy curl</button>
-        </div>
-        </div>
-        </div>
-        </div>
-        <script>
-        $(function(){
-        $(document).on('click', '.scan-evidence', async function(){
-        const url = $(this).data('url');
-        const modalEl = document.getElementById('scanEvidenceModal');
-        const modal = new bootstrap.Modal(modalEl);
-        $('#scan-evidence-req').text('Loading...');
-        $('#scan-evidence-resp').text('');
-        modal.show();
-        try {
-        const res = await fetch(`/api/evidence?url=${encodeURIComponent(url)}`);
-        const jr = await res.json();
-        if (!jr.success) { $('#scan-evidence-req').text('No evidence found'); return; }
-        const req = (jr.entry||{}).request||{}; const resp = (jr.entry||{}).response||{};
-        const reqText = [`${req.method||'GET'} ${req.url||''}`].concat(Object.entries(req.headers||{}).map(([k,v])=>`${k}: ${v}`)).concat(['', req.data||'']).join('\n');
-        const respText = [`Status: ${resp.status||''}  Time: ${resp.time_ms||0} ms`].concat(Object.entries(resp.headers||{}).map(([k,v])=>`${k}: ${v}`)).concat(['', (resp.text||'').slice(0,100000)]).join('\n');
-        $('#scan-evidence-req').text(reqText);
-        $('#scan-evidence-resp').text(respText);
-        $('#copy-curl-scan').attr('data-curl', jr.curl||'');
-        } catch(e){ $('#scan-evidence-req').text('Error loading evidence'); }
-        });
-        $('#copy-curl-scan').on('click', async function(){
-        const curl = $(this).attr('data-curl')||''; if (!curl) { alert('No curl available'); return; }
-        try{ await navigator.clipboard.writeText(curl); alert('Copied curl'); }catch(e){ alert('Copy failed'); }
-        });
-        });
-        </script>
-        {% endblock %}
+    </div>
+</div>
 
-{% block extra_js %}
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-warning text-dark">
+        <i class="fas fa-microscope me-2"></i> 0-Day Hypotheses & Economic Flow
+    </div>
+    <div class="card-body" id="scan-detail-hypotheses-container">
+        <div class="text-center text-muted py-4">No research hypotheses generated yet</div>
+    </div>
+</div>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-danger text-white">
+        <i class="fas fa-bug me-2"></i> Findings
+    </div>
+    <div class="card-body" id="scan-detail-findings-container">
+        <div class="text-center text-muted py-4">No findings yet</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-    $(document).ready(function() {
-        const scanId = '{{ scan.id }}';
+    document.addEventListener('DOMContentLoaded', function() {
+        const scanId = window.location.pathname.split('/').pop();
         
-        // Load scan details
-        function loadScanDetails() {
-            $.ajax({
-                url: `/api/scan_status/${scanId}`,
-                type: 'GET',
-                success: function(response) {
-                    if (response.success) {
-                        const scan = response.scan;
-                        
-                        // Update progress bar
-                        $('.progress-bar').css('width', `${scan.progress}%`).text(`${scan.progress}%`);
-                        
-                        // Update current module info if running
-                        if (scan.status === 'running') {
-                            $('#current-module').text(scan.current_module || 'N/A');
-                            $('#status-message').text(scan.status_message || 'Processing...');
-                        }
-                        
-                        // Update status badge
-                        let statusBadge = '';
-                        switch (scan.status) {
-                            case 'running':
-                                statusBadge = '<span class="badge bg-info">Running</span>';
-                                break;
-                            case 'completed':
-                                statusBadge = '<span class="badge bg-success">Completed</span>';
-                                break;
-                            case 'error':
-                                statusBadge = '<span class="badge bg-danger">Error</span>';
-                                break;
-                            default:
-                                statusBadge = `<span class="badge bg-secondary">${scan.status}</span>`;
-                        }
-                        // Update the status cell reliably
-                        const statusCell = $("th:contains('Status')").closest('tr').find('td');
-                        statusCell.html(statusBadge);
-                        
-                        // Show/hide stop button based on status
-                        if (scan.status !== 'running') {
-                            $('#stop-scan').hide();
-                        }
-                        
-                        // Show download report button if completed
-                        if (scan.status === 'completed') {
-                            $('.card-body .mt-3').html(`
-                                <a href="/api/report/${scanId}" class="btn btn-success">
-                                    <i class="fas fa-file-pdf me-1"></i> Download Report
-                                </a>
-                            `);
-                        }
-                    }
+        // Fetch scan details
+        fetch(`/api/scan_status/${scanId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateScanDetailUI(data.scan);
+                } else {
+                    showToast(`Error fetching scan details: ${data.error}`, 'danger');
                 }
+            })
+            .catch(error => {
+                console.error('Error fetching scan details:', error);
+                showToast('Error fetching scan details', 'danger');
             });
-        }
-        
-        // Load vulnerabilities
-        function loadVulnerabilities() {
-            $.ajax({
-                url: `/api/scan_results/${scanId}`,
-                type: 'GET',
-                success: function(response) {
-                    if (response.success && response.results && response.results.vulnerabilities && response.results.vulnerabilities.length > 0) {
-                        $('#no-vulnerabilities').addClass('d-none');
-                        $('#vulnerabilities-list').removeClass('d-none');
-                        
-                        // Clear existing vulnerabilities
-                        $('#vulnerabilities-list tbody').empty();
-                        
-                        // Add each vulnerability
-                        response.results.vulnerabilities.forEach(function(vuln) {
-                            let severityClass = '';
-                            switch (vuln.severity.toLowerCase()) {
-                                case 'critical':
-                                    severityClass = 'bg-danger';
-                                    break;
-                                case 'high':
-                                    severityClass = 'bg-warning text-dark';
-                                    break;
-                                case 'medium':
-                                    severityClass = 'bg-info text-dark';
-                                    break;
-                                case 'low':
-                                    severityClass = 'bg-success';
-                                    break;
-                                default:
-                                    severityClass = 'bg-secondary';
-                            }
-                            
-                            const vulnHtml = `
-                                <tr>
-                                    <td>${vuln.type}</td>
-                                    <td>${vuln.url}</td>
-                                    <td><span class="badge ${severityClass}">${vuln.severity}</span></td>
-                                    <td>${vuln.parameter || 'N/A'}</td>
-                                    <td>
-                                        <button class="btn btn-sm btn-info view-details" data-bs-toggle="modal" data-bs-target="#vulnDetailsModal" data-vuln-index="${response.results.vulnerabilities.indexOf(vuln)}">
-                                            View Details
-                                        </button>
-                                    </td>
-                                    <td>
-                                        <button class="btn btn-sm btn-outline-info scan-evidence" data-url="${vuln.url}">Evidence</button>
-                                    </td>
-                                </tr>
-                            `;
-                            $('#vulnerabilities-list tbody').append(vulnHtml);
-                        });
-                    } else {
-                        $('#no-vulnerabilities').removeClass('d-none');
-                        $('#vulnerabilities-list').addClass('d-none');
-                    }
+
+        // Fetch scan log
+        fetch(`/api/scan_log/${scanId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    data.log.forEach(logEntry => appendScanLog(logEntry));
                 }
+            })
+            .catch(error => {
+                console.error('Error fetching scan log:', error);
             });
-        }
-        
-        // Load scan log
-        function loadScanLog() {
-            $.ajax({
-                url: `/api/scan_log/${scanId}`,
-                type: 'GET',
-                success: function(response) {
-                    if (response.success && response.log && response.log.length > 0) {
-                        $('#no-scan-log').addClass('d-none');
-                        $('#scan-log').removeClass('d-none');
-                        
-                        // Set log content
-                        $('#scan-log pre').text(response.log.join('\n'));
-                    } else {
-                        $('#no-scan-log').removeClass('d-none');
-                        $('#scan-log').addClass('d-none');
-                    }
-                }
-            });
-        }
-        
-        // Handle stop scan button click
-        $('#stop-scan').click(function() {
-            $.ajax({
-                url: `/api/stop_scan/${scanId}`,
-                type: 'POST',
-                success: function(response) {
-                    if (response.success) {
-                        alert('Scan stopping...');
-                        loadScanDetails();
-                    } else {
-                        alert('Error: ' + response.error);
-                    }
-                },
-                error: function() {
-                    alert('An error occurred while stopping the scan.');
-                }
-            });
-        });
-        
-        // Initialize Socket.IO connection
-        const socket = io();
-        
-        // Listen for scan updates
+
+        // Listen for real-time updates via Socket.IO
         socket.on('scan_update', function(data) {
-            if (data.scan_id === scanId) {
-                loadScanDetails();
+            if (data.id === scanId) {
+                updateScanDetailUI(data);
             }
         });
-        
-        // Listen for scan progress updates
-        socket.on('scan_progress', function(data) {
-            if (data.scan_id === scanId) {
-                // Update progress bar
-                $('.progress-bar').css('width', `${data.progress}%`).text(`${data.progress}%`);
-                
-                // Update current module info
-                $('#current-module').text(data.module || 'N/A');
-                $('#status-message').text(data.message || 'Processing...');
-            }
-        });
-        
-        // Listen for vulnerability found events
         socket.on('vulnerability_found', function(data) {
             if (data.scan_id === scanId) {
-                loadVulnerabilities();
+                addFindingToDetailUI(data.vulnerability);
             }
         });
-        
-        // Listen for scan completion events
+        socket.on('scan_progress', function(data) {
+            if (data.scan_id === scanId) {
+                appendScanLog(`[${data.module}] ${data.message} (${data.progress}%)`);
+            }
+        });
         socket.on('scan_complete', function(data) {
             if (data.scan_id === scanId) {
-                loadScanDetails();
-                loadVulnerabilities();
-                loadScanLog();
+                appendScanLog(`Session completed with status: ${data.status}`);
             }
         });
-        
-        // Initial load
-        loadScanDetails();
-        loadVulnerabilities();
-        loadScanLog();
-        
-        // Refresh data every 5 seconds if scan is running
-        if ('{{ scan.status }}' === 'running') {
-            setInterval(function() {
-                loadScanDetails();
-                loadVulnerabilities();
-                loadScanLog();
-            }, 5000);
-        }
-    });
-</script>
+        socket.on('scan_error', function(data) {
+            if (data.scan_id === scanId) {
+                appendScanLog(`Session error: ${data.error}`, 'error');
+            }
+        });
 
-<!-- Vulnerability Details Modal -->
-<div class="modal fade" id="vulnDetailsModal" tabindex="-1" aria-labelledby="vulnDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-                <h5 class="modal-title" id="vulnDetailsModalLabel">Vulnerability Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="vuln-details-content">
-                    <!-- Vulnerability details will be populated here via JavaScript -->
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
+        // Stop button event listener
+        document.getElementById('scan-detail-stop-btn').addEventListener('click', function() {
+            stopScan(scanId);
+        });
+    });
+
+    function updateScanDetailUI(scan) {
+        document.getElementById('scan-detail-target').textContent = scan.target;
+        document.getElementById('scan-detail-target-full').textContent = scan.target;
+        document.getElementById('scan-detail-id').textContent = scan.id;
+        
+        const statusBadge = document.getElementById('scan-detail-status');
+        statusBadge.textContent = scan.status;
+        statusBadge.className = `badge ${getScanStatusBadgeClass(scan.status)}`;
+
+        document.getElementById('scan-detail-progress').textContent = scan.progress || 0;
+        document.getElementById('scan-detail-progress-bar').style.width = `${scan.progress || 0}%`;
+        document.getElementById('scan-detail-progress-bar').setAttribute('aria-valuenow', scan.progress || 0);
+        document.getElementById('scan-detail-start-time').textContent = new Date(scan.start_time).toLocaleString();
+        document.getElementById('scan-detail-end-time').textContent = scan.end_time ? new Date(scan.end_time).toLocaleString() : 'N/A';
+        document.getElementById('scan-detail-vuln-count').textContent = scan.vulnerabilities ? scan.vulnerabilities.length : 0;
+        document.getElementById('scan-detail-stop-btn').setAttribute('data-scan-id', scan.id);
+
+        // Fetch and render hypotheses if scan is complete
+        if (scan.status === 'completed') {
+            fetch(`/api/scan_results/${scan.id}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.results.hypotheses) {
+                        renderHypotheses(data.results.hypotheses);
+                    }
+                })
+                .catch(err => console.error("Error fetching hypotheses:", err));
+        }
+
+        // Update findings list
+        if (scan.vulnerabilities && scan.vulnerabilities.length > 0) {
+            const findingsContainer = document.getElementById('scan-detail-findings-container');
+            findingsContainer.innerHTML = ''; // Clear previous
+            const table = document.createElement('table');
+            table.className = 'table table-hover vuln-table';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            const tbody = table.querySelector('tbody');
+            scan.vulnerabilities.forEach(vuln => addFindingToDetailUI(vuln, tbody));
+            findingsContainer.appendChild(table);
+        }
+    }
+
+    function addFindingToDetailUI(vuln, tbody = null) {
+        tbody = tbody || document.getElementById('scan-detail-findings-container').querySelector('tbody');
+        if (!tbody) {
+            // If tbody doesn't exist, create the table structure
+            const findingsContainer = document.getElementById('scan-detail-findings-container');
+            findingsContainer.innerHTML = '';
+            const table = document.createElement('table');
+            table.className = 'table table-hover vuln-table';
+            table.innerHTML = `
+                <thead>
+                    <tr>
+                        <th>Severity</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            `;
+            findingsContainer.appendChild(table);
+            tbody = table.querySelector('tbody');
+        }
+
+        const tr = document.createElement('tr');
+        const severityClass = getSeverityClass(vuln.severity);
+        tr.innerHTML = `
+            <td><span class="${severityClass}">${vuln.severity}</span></td>
+            <td>${vuln.type}</td>
+            <td><a href="${vuln.target}" target="_blank" title="${vuln.target}">${truncateUrl(vuln.target, 30)}</a></td>
+            <td>${vuln.description}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-info view-evidence-btn" data-bs-toggle="modal" data-bs-target="#evidenceModal" data-evidence='${JSON.stringify(vuln.evidence)}'>
+                    <i class="fas fa-file-alt"></i> Evidence
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    function appendScanLog(message, level = 'info') {
+        const logContainer = document.getElementById('scan-detail-log');
+        if (logContainer) {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-level-${level}`;
+            logEntry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    }
+
+    function renderHypotheses(hypotheses) {
+        const container = document.getElementById('scan-detail-hypotheses-container');
+        if (!hypotheses || hypotheses.length === 0) return;
+
+        container.innerHTML = '';
+        hypotheses.forEach(h => {
+            const card = document.createElement('div');
+            card.className = 'hypothesis-item mb-4 p-3 border rounded border-warning bg-dark';
+            
+            let flowHtml = '<div class="economic-flow-container">';
+            (h.economic_flow || []).forEach((step, i) => {
+                flowHtml += `
+                    <div class="flow-node">
+                        <div class="small opacity-50 mb-1">Extraction ${i+1}</div>
+                        ${step}
+                    </div>
+                `;
+                if (i < h.economic_flow.length - 1) {
+                    flowHtml += '<div class="flow-arrow"><i class="fas fa-chevron-right"></i></div>';
+                }
+            });
+            flowHtml += '</div>';
+
+            card.innerHTML = `
+                <h5 class="text-warning"><i class="fas fa-brain me-2"></i>${h.title}</h5>
+                <div class="mb-2 small"><strong>Attack Chain:</strong> <span class="text-info">${h.attack_chain.join(' → ')}</span></div>
+                <div class="mb-2"><strong>Impact:</strong> ${h.potential_impact}</div>
+                <div class="badge bg-danger mb-3">Est. Funds at Risk: ${h.funds_at_risk_estimate}</div>
+                <h6 class="border-top border-secondary pt-2 small text-uppercase">Economic Extraction Path</h6>
+                ${flowHtml}
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
 {% endblock %}

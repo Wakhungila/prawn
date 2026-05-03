@@ -11,17 +11,10 @@ from modules.vuln_testing.xss_scanner import XSSScanner
 class TestXSSScanner(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock configuration
-        self.config = {
-            'output_dir': './test_results',
-            'callbacks': {
-                'domain': 'example.com'
-            }
-        }
-        
         # Create the scanner with the mock configuration
-        self.scanner = XSSScanner()
-        self.scanner.config = self.config
+        self.scanner = XSSScanner() # No config needed in constructor now
+        self.scanner.config = {'output_dir': './test_results'} # Set config after init
+        self.scanner.target = "http://example.com" # Set a default target for tests
         
     @patch('modules.vuln_testing.xss_scanner.make_request')
     def test_detect_reflected_xss(self, mock_make_request):

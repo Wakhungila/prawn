@@ -1,531 +1,65 @@
-{% extends "base.html" %}
-
-{% block title %}Vulnerabilities | PIN0CCHI0{% endblock %}
+{% extends "layout.html" %}
+{% set title = "Vulnerabilities" %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col">
-            <h1 class="h3">Vulnerabilities</h1>
-            <p class="text-muted">View and manage discovered vulnerabilities</p>
-        </div>
-        <div class="col-auto">
-            <div class="btn-group">
-                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="fas fa-filter"></i> Filter
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><h6 class="dropdown-header">Severity</h6></li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="high" id="filter-high" checked>
-                                <label class="form-check-label" for="filter-high">High</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="medium" id="filter-medium" checked>
-                                <label class="form-check-label" for="filter-medium">Medium</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="low" id="filter-low" checked>
-                                <label class="form-check-label" for="filter-low">Low</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><h6 class="dropdown-header">Vulnerability Type</h6></li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="xss" id="filter-xss" checked>
-                                <label class="form-check-label" for="filter-xss">XSS</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="sql" id="filter-sql" checked>
-                                <label class="form-check-label" for="filter-sql">SQL Injection</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="csrf" id="filter-csrf" checked>
-                                <label class="form-check-label" for="filter-csrf">CSRF</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="ssrf" id="filter-ssrf" checked>
-                                <label class="form-check-label" for="filter-ssrf">SSRF</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="idor" id="filter-idor" checked>
-                                <label class="form-check-label" for="filter-idor">IDOR</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li>
-                        <div class="dropdown-item">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" value="other" id="filter-other" checked>
-                                <label class="form-check-label" for="filter-other">Other</label>
-                            </div>
-                        </div>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><button class="dropdown-item" id="apply-filters">Apply Filters</button></li>
-                </ul>
-            </div>
-            <button class="btn btn-outline-secondary ms-2" id="export-csv">
-                <i class="fas fa-download"></i> Export CSV
-            </button>
-        </div>
-    </div>
+<h2 class="mb-4">All Discovered Findings</h2>
 
-    <div class="card">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover vuln-table" id="vulnerabilities-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Severity</th>
-                            <th>Type</th>
-                            <th>URL</th>
-                            <th>Parameter</th>
-                            <th>Scan</th>
-                            <th>Time</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for vuln in vulnerabilities %}
-                        <tr data-severity="{{ vuln.severity|lower }}" data-type="{{ vuln.type|lower }}">
-                            <td>{{ vuln.id }}</td>
-                            <td>
-                                <span class="severity-{{ vuln.severity|lower }}">{{ vuln.severity }}</span>
-                            </td>
-                            <td>{{ vuln.type }}</td>
-                            <td>
-                                <a href="{{ vuln.url }}" target="_blank" title="{{ vuln.url }}">
-                                    {{ vuln.url|truncate(30) }}
-                                </a>
-                            </td>
-                            <td>{{ vuln.parameter }}</td>
-                            <td>
-                                <a href="/scan/{{ vuln.scan_id }}">
-                                    {{ vuln.scan_id[:8] }}...
-                                </a>
-                            </td>
-                            <td>{{ vuln.timestamp|format_datetime }}</td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-primary view-vuln-btn" data-vuln-id="{{ vuln.id }}">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-info evidence-btn" data-url="{{ vuln.url }}" title="View Evidence">
-                                    <i class="fas fa-flask"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary verify-vuln-btn" data-vuln-id="{{ vuln.id }}">
-                                    <i class="fas fa-check"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger false-positive-btn" data-vuln-id="{{ vuln.id }}">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="8" class="text-center py-4">
-                                <div class="text-muted">No vulnerabilities found</div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+<div class="card shadow-sm">
+    <div class="card-header bg-danger text-white">
+        <i class="fas fa-bug me-2"></i> Comprehensive Findings List
+    </div>
+    <div class="card-body">
+        <div id="all-vulnerabilities-container">
+            <div class="text-center text-muted py-4">Loading findings...</div>
         </div>
     </div>
-
-    <!-- Pagination -->
-    {% if total_pages > 1 %}
-    <div class="d-flex justify-content-center mt-4">
-        <nav aria-label="Vulnerability pagination">
-            <ul class="pagination">
-                <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
-                    <a class="page-link" href="?page={{ current_page - 1 }}" aria-label="Previous">
-                        <span aria-hidden="true">&laquo;</span>
-                    </a>
-                </li>
-                
-                {% for page in range(1, total_pages + 1) %}
-                <li class="page-item {% if page == current_page %}active{% endif %}">
-                    <a class="page-link" href="?page={{ page }}">{{ page }}</a>
-                </li>
-                {% endfor %}
-                
-                <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
-                    <a class="page-link" href="?page={{ current_page + 1 }}" aria-label="Next">
-                        <span aria-hidden="true">&raquo;</span>
-                    </a>
-                </li>
-            </ul>
-        </nav>
-    </div>
-    {% endif %}
-</div>
-
-<!-- Vulnerability Detail Modal -->
-<div class="modal fade" id="vulnDetailModal" tabindex="-1" aria-labelledby="vulnDetailModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="vulnDetailModalLabel">Vulnerability Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="vuln-detail-content">
-                <div class="text-center">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="verify-vuln-modal">Verify</button>
-                <button type="button" class="btn btn-danger" id="false-positive-modal">Mark as False Positive</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Evidence Modal -->
-<div class="modal fade" id="evidenceModal" tabindex="-1" aria-labelledby="evidenceModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-xl">
-    <div class="modal-content">
-      <div class="modal-header bg-info text-white">
-        <h5 class="modal-title" id="evidenceModalLabel">Request/Response Evidence</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <h6>Request</h6>
-          <pre id="evidence-request" class="bg-dark text-light p-3 rounded" style="max-height: 250px; overflow:auto;"></pre>
-        </div>
-        <div>
-          <h6>Response</h6>
-          <pre id="evidence-response" class="bg-dark text-light p-3 rounded" style="max-height: 350px; overflow:auto;"></pre>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="copy-curl-evidence">Copy curl</button>
-      </div>
-    </div>
-  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Filter functionality
-        document.getElementById('apply-filters').addEventListener('click', function() {
-            const severityFilters = {
-                high: document.getElementById('filter-high').checked,
-                medium: document.getElementById('filter-medium').checked,
-                low: document.getElementById('filter-low').checked
-            };
-            
-            const typeFilters = {
-                xss: document.getElementById('filter-xss').checked,
-                sql: document.getElementById('filter-sql').checked,
-                csrf: document.getElementById('filter-csrf').checked,
-                ssrf: document.getElementById('filter-ssrf').checked,
-                idor: document.getElementById('filter-idor').checked,
-                other: document.getElementById('filter-other').checked
-            };
-            
-            const rows = document.querySelectorAll('#vulnerabilities-table tbody tr');
-            
-            rows.forEach(row => {
-                if (!row.hasAttribute('data-severity')) return; // Skip the "no vulnerabilities" row
-                
-                const severity = row.getAttribute('data-severity');
-                const type = row.getAttribute('data-type');
-                
-                // Determine if this row should be visible based on filters
-                let showSeverity = severityFilters[severity];
-                let showType = false;
-                
-                // Check if the type matches any of our filter types
-                if (type === 'xss' && typeFilters.xss) showType = true;
-                else if (type === 'sql' && typeFilters.sql) showType = true;
-                else if (type === 'csrf' && typeFilters.csrf) showType = true;
-                else if (type === 'ssrf' && typeFilters.ssrf) showType = true;
-                else if (type === 'idor' && typeFilters.idor) showType = true;
-                else if (typeFilters.other) showType = true; // Any other type
-                
-                // Show/hide the row
-                if (showSeverity && showType) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-        });
-        
-        // Export to CSV
-        document.getElementById('export-csv').addEventListener('click', function() {
-            fetch('/api/vulnerabilities/export')
-                .then(response => response.blob())
-                .then(blob => {
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'vulnerabilities.csv';
-                    document.body.appendChild(a);
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                })
-                .catch(error => {
-                    console.error('Error exporting vulnerabilities:', error);
-                    alert('Error exporting vulnerabilities');
-                });
-        });
-        
-        // Evidence viewer
-        document.querySelectorAll('.evidence-btn').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const url = this.getAttribute('data-url');
-                const modalEl = document.getElementById('evidenceModal');
-                const modal = new bootstrap.Modal(modalEl);
-                // reset content
-                document.getElementById('evidence-request').textContent = 'Loading...';
-                document.getElementById('evidence-response').textContent = '';
-                modal.show();
-                try {
-                    const res = await fetch(`/api/evidence?url=${encodeURIComponent(url)}`);
-                    const jr = await res.json();
-                    if (!jr.success) {
-                        document.getElementById('evidence-request').textContent = `Error: ${jr.error || 'Failed to load evidence'}`;
-                        return;
-                    }
-                    const entry = jr.entry || {};
-                    const req = entry.request || {};
-                    const resp = entry.response || {};
-                    const reqText = [
-                        `${req.method || 'GET'} ${req.url || ''}`,
-                        ...Object.entries(req.headers || {}).map(([k,v]) => `${k}: ${v}`),
-                        '',
-                        (req.data || '')
-                    ].join('\n');
-                    const respText = [
-                        `Status: ${resp.status || ''}  Time: ${resp.time_ms || 0} ms`,
-                        ...Object.entries(resp.headers || {}).map(([k,v]) => `${k}: ${v}`),
-                        '',
-                        (resp.text || '').slice(0, 100000)
-                    ].join('\n');
-                    document.getElementById('evidence-request').textContent = reqText;
-                    document.getElementById('evidence-response').textContent = respText;
-                    const curlBtn = document.getElementById('copy-curl-evidence');
-                    curlBtn.setAttribute('data-curl', jr.curl || '');
-                } catch (e) {
-                    document.getElementById('evidence-request').textContent = 'Error loading evidence';
-                }
-            });
-        });
-        document.getElementById('copy-curl-evidence')?.addEventListener('click', async function() {
-            const curl = this.getAttribute('data-curl') || '';
-            if (!curl) { alert('No curl available'); return; }
-            try { await navigator.clipboard.writeText(curl); alert('Copied curl to clipboard'); } catch(e){ alert('Copy failed'); }
-        });
+        const vulnContainer = document.getElementById('all-vulnerabilities-container');
 
-        // View vulnerability details
-        document.querySelectorAll('.view-vuln-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const vulnId = this.getAttribute('data-vuln-id');
-                const modal = new bootstrap.Modal(document.getElementById('vulnDetailModal'));
-                
-                // Show modal with loading spinner
-                modal.show();
-                
-                // Fetch vulnerability details
-                fetch(`/api/vulnerability/${vulnId}`)
-                    .then(response => response.json())
-                    .then(data => {
-                        // Update modal content
-                        const content = document.getElementById('vuln-detail-content');
-                        
-                        // Set current vulnerability ID for modal buttons
-                        document.getElementById('verify-vuln-modal').setAttribute('data-vuln-id', vulnId);
-                        document.getElementById('false-positive-modal').setAttribute('data-vuln-id', vulnId);
-                        
-                        // Format the vulnerability details
-                        let severityClass = '';
-                        if (data.severity === 'High') severityClass = 'severity-high';
-                        if (data.severity === 'Medium') severityClass = 'severity-medium';
-                        if (data.severity === 'Low') severityClass = 'severity-low';
-                        
-                        content.innerHTML = `
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <h6>Vulnerability Type</h6>
-                                    <p>${data.type}</p>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Severity</h6>
-                                    <p><span class="${severityClass}">${data.severity}</span></p>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6>URL</h6>
-                                    <p><a href="${data.url}" target="_blank">${data.url}</a></p>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <h6>Parameter</h6>
-                                    <p>${data.parameter || 'N/A'}</p>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Method</h6>
-                                    <p>${data.method || 'GET'}</p>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6>Description</h6>
-                                    <p>${data.description}</p>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6>Payload</h6>
-                                    <pre><code>${data.payload || 'N/A'}</code></pre>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6>Evidence</h6>
-                                    <pre><code>${data.evidence || 'N/A'}</code></pre>
-                                </div>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-12">
-                                    <h6>Remediation</h6>
-                                    <p>${data.remediation || 'No specific remediation provided.'}</p>
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>Scan ID</h6>
-                                    <p><a href="/scan/${data.scan_id}">${data.scan_id}</a></p>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>Discovered</h6>
-                                    <p>${new Date(data.timestamp).toLocaleString()}</p>
-                                </div>
-                            </div>
-                        `;
-                    })
-                    .catch(error => {
-                        console.error('Error fetching vulnerability details:', error);
-                        document.getElementById('vuln-detail-content').innerHTML = 
-                            '<div class="alert alert-danger">Error loading vulnerability details</div>';
-                    });
+        async function fetchAllVulnerabilities() {
+            vulnContainer.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i> Loading findings...</div>';
+            const response = await fetch('/api/vulnerabilities');
+            const data = await response.json();
+
+            if (data.success && data.vulnerabilities.length > 0) {
+                renderVulnerabilities(data.vulnerabilities);
+            } else {
+                vulnContainer.innerHTML = '<div class="text-center text-muted py-4">No findings yet</div>';
+            }
+        }
+
+        function renderVulnerabilities(vulnerabilities) {
+            let html = `<table class="table table-hover vuln-table"><thead><tr>
+                            <th>Severity</th>
+                            <th>Type</th>
+                            <th>Target</th>
+                            <th>Description</th>
+                            <th>Scan ID</th>
+                            <th>Time</th>
+                            <th>Actions</th>
+                        </tr></thead><tbody>`;
+            vulnerabilities.forEach(vuln => {
+                const severityClass = getSeverityClass(vuln.severity);
+                html += `<tr>
+                            <td><span class="${severityClass}">${vuln.severity}</span></td>
+                            <td>${vuln.type}</td>
+                            <td><a href="${vuln.target}" target="_blank" title="${vuln.target}">${truncateUrl(vuln.target, 30)}</a></td>
+                            <td>${vuln.description}</td>
+                            <td><a href="/scan/${vuln.scan_id}">${vuln.scan_id.substring(0, 8)}...</a></td>
+                            <td>${new Date(vuln.timestamp).toLocaleString()}</td>
+                            <td><button class="btn btn-sm btn-outline-info view-evidence-btn" data-bs-toggle="modal" data-bs-target="#evidenceModal" data-evidence='${JSON.stringify(vuln.evidence)}'><i class="fas fa-file-alt"></i> Evidence</button></td>
+                        </tr>`;
             });
-        });
-        
-        // Verify vulnerability
-        document.querySelectorAll('.verify-vuln-btn, #verify-vuln-modal').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const vulnId = this.getAttribute('data-vuln-id');
-                
-                fetch(`/api/vulnerability/${vulnId}/verify`, {
-                    method: 'POST'
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        // Close modal if open
-                        const modal = bootstrap.Modal.getInstance(document.getElementById('vulnDetailModal'));
-                        if (modal) modal.hide();
-                        
-                        // Show success message
-                        alert('Vulnerability verified');
-                        
-                        // Reload page to update status
-                        location.reload();
-                    } else {
-                        alert(`Error: ${data.error}`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error verifying vulnerability:', error);
-                    alert('Error verifying vulnerability');
-                });
-            });
-        });
-        
-        // Mark as false positive
-        document.querySelectorAll('.false-positive-btn, #false-positive-modal').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const vulnId = this.getAttribute('data-vuln-id');
-                
-                if (confirm('Are you sure you want to mark this as a false positive?')) {
-                    fetch(`/api/vulnerability/${vulnId}/false-positive`, {
-                        method: 'POST'
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Close modal if open
-                            const modal = bootstrap.Modal.getInstance(document.getElementById('vulnDetailModal'));
-                            if (modal) modal.hide();
-                            
-                            // Show success message
-                            alert('Marked as false positive');
-                            
-                            // Reload page to update status
-                            location.reload();
-                        } else {
-                            alert(`Error: ${data.error}`);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error marking as false positive:', error);
-                        alert('Error marking as false positive');
-                    });
-                }
-            });
-        });
+            html += `</tbody></table>`;
+            vulnContainer.innerHTML = html;
+        }
+
+        fetchAllVulnerabilities();
     });
 </script>
 {% endblock %}

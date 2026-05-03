@@ -11,17 +11,10 @@ from modules.vuln_testing.sql_injection import SQLInjectionScanner
 class TestSQLInjectionScanner(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock configuration
-        self.config = {
-            'output_dir': './test_results',
-            'callbacks': {
-                'domain': 'example.com'
-            }
-        }
-        
         # Create the scanner with the mock configuration
-        self.scanner = SQLInjectionScanner()
-        self.scanner.config = self.config
+        self.scanner = SQLInjectionTester() # Corrected class name
+        self.scanner.config = {'output_dir': './test_results'} # Set config after init
+        self.scanner.target = "http://example.com" # Set a default target for tests
         
     @patch('modules.vuln_testing.sql_injection.make_request')
     def test_detect_error_based_sqli(self, mock_make_request):

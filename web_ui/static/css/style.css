@@ -1,0 +1,131 @@
+/* PRAWN 🦐 Web UI Custom Styles */
+
+body {
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #212529; /* Dark background for the whole app */
+    color: #e2e6ea; /* Light text color */
+}
+
+.navbar {
+    border-bottom: 1px solid #343a40;
+}
+
+.card {
+    background-color: #2c3034; /* Slightly lighter dark for cards */
+    border: 1px solid #495057;
+    color: #e2e6ea;
+}
+
+.card-header {
+    background-color: #343a40; /* Darker header for cards */
+    border-bottom: 1px solid #495057;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.btn-success {
+    background-color: #198754;
+    border-color: #198754;
+}
+.btn-success:hover {
+    background-color: #157347;
+    border-color: #146c43;
+}
+
+.btn-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+.btn-danger:hover {
+    background-color: #bb2d3b;
+    border-color: #b02a37;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529; /* Dark text for warning */
+}
+.btn-warning:hover {
+    background-color: #ffcd39;
+    border-color: #ffc720;
+}
+
+.badge {
+    font-size: 0.85em;
+    padding: 0.4em 0.6em;
+    border-radius: 0.375rem;
+}
+
+/* Custom badge colors for scan status */
+.badge-starting { background-color: #0dcaf0; color: #212529; } /* Info */
+.badge-running { background-color: #0d6efd; } /* Primary */
+.badge-completed { background-color: #198754; } /* Success */
+.badge-failed { background-color: #dc3545; } /* Danger */
+.badge-stopping { background-color: #ffc107; color: #212529; } /* Warning */
+.badge-stopped { background-color: #6c757d; } /* Secondary */
+
+/* Custom badge colors for severity */
+.severity-CRITICAL { background-color: #dc3545; } /* Danger */
+.severity-HIGH { background-color: #ffc107; color: #212529; } /* Warning */
+.severity-MEDIUM { background-color: #0dcaf0; color: #212529; } /* Info */
+.severity-LOW { background-color: #198754; } /* Success */
+.severity-INFO { background-color: #6c757d; } /* Secondary */
+
+/* Progress bar styling */
+.progress-bar {
+    background-color: #0d6efd;
+}
+
+/* Chat Offcanvas */
+#aiChatOffcanvas {
+    width: 400px;
+}
+#chat-messages {
+    background-color: #343a40;
+    min-height: 200px;
+}
+.chat-message.user {
+    text-align: right;
+    color: #90CAF9; /* Light blue */
+}
+.chat-message.assistant {
+    text-align: left;
+    color: #A5D6A7; /* Light green */
+}
+
+/* Economic Flow Visualization Styles */
+.economic-flow-container {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    padding: 15px 5px;
+    scrollbar-width: thin;
+}
+
+.flow-node {
+    background-color: #343a40;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    padding: 10px;
+    min-width: 160px;
+    max-width: 220px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: #f8f9fa;
+}
+
+.flow-arrow {
+    color: #ffc107;
+    margin: 0 12px;
+    font-size: 1.1rem;
+}

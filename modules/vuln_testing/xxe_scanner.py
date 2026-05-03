@@ -4,12 +4,12 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import re
 from core.base_module import VulnerabilityTestingModule
-from core.utils import make_http_request, generate_random_string
+from core.utils import make_http_request, generate_random_string, make_request
 
 class XXEScanner(VulnerabilityTestingModule):
     """XML External Entity (XXE) vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "xxe_scanner"
         self.description = "Tests for XML External Entity (XXE) vulnerabilities"

@@ -1,9 +1,9 @@
-# PIN0CCHI0 Default Configuration
+# PRAWN Default Configuration
 
 general:
   threads: 10
   timeout: 30
-  user_agent: 'PIN0CCHI0/0.1.0'
+  user_agent: 'PRAWN/0.1.0'
   verbose: false
 
 recon:
@@ -89,7 +89,7 @@ authentication:
 
 # Headers to include in requests
 headers:
-  User-Agent: 'PIN0CCHI0/0.1.0'
+  User-Agent: 'PRAWN/0.1.0'
   Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
   Accept-Language: 'en-US,en;q=0.5'
   Accept-Encoding: 'gzip, deflate'

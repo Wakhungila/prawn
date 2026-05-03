@@ -2,18 +2,18 @@
 # -*- coding: utf-8 -*-
 
 """
-PIN0CCHI0 Base Module
+PRAWN Base Module
 
-This module defines the base class that all PIN0CCHI0 modules should inherit from.
+This module defines the base class that all PRAWN modules should inherit from.
 """
 
 import logging
 from abc import ABC, abstractmethod
 
-logger = logging.getLogger('PIN0CCHI0.BaseModule')
+logger = logging.getLogger('PRAWN.BaseModule')
 
 class BaseModule(ABC):
-    """Base class for all PIN0CCHI0 modules."""
+    """Base class for all PRAWN modules."""
     
     def __init__(self, name=None, description=None):
         """
@@ -26,7 +26,7 @@ class BaseModule(ABC):
         self.name = name or self.__class__.__name__
         self.description = description or "No description provided"
         self.results = []
-        self.logger = logging.getLogger(f'PIN0CCHI0.{self.name}')
+        self.logger = logging.getLogger(f'PRAWN.{self.name}')
     
     @abstractmethod
     def run(self, **kwargs):
@@ -86,9 +86,6 @@ class VulnTestingModule(BaseModule):
     def __init__(self, name=None, description=None):
         super().__init__(name, description)
         self.category = 'vuln_testing'
-
-# Compatibility alias for legacy import names
-VulnerabilityTestingModule = VulnTestingModule
 
 
 class ExploitationModule(BaseModule):

@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-PIN0CCHI0 Utilities
+PRAWN Utilities
 
-This module provides utility functions used across the PIN0CCHI0 framework.
+This module provides utility functions used across the PRAWN framework.
 """
 
 import os
@@ -17,7 +17,26 @@ import subprocess
 from urllib.parse import urlparse
 from datetime import datetime
 
-logger = logging.getLogger('PIN0CCHI0.Utils')
+logger = logging.getLogger('PRAWN.Utils')
+
+# PRAWN Spinner Verbs - High-fidelity "thought" verbs for CLI status updates
+SPINNER_VERBS = [
+    "COBOMBULATING", "EXFILTRATING", "OSSIFYING", "DECIMATING", "DISSECTING", "PROBING",
+    "INFILTRATING", "SCOURING", "SATURATING", "HARVESTING", "CORRALING", "RAKING",
+    "TREPANNING", "EXCAVATING", "FORAGING", "SIFTING", "CULLING", "SNARING",
+    "GELATING", "ANCHORING", "ENMESHING", "SURVEYING", "SHADOWING", "SPLICING",
+    "FRACTURING", "DREDGING", "GLOMMING", "RIVETING", "SCOOPING", "SKEWERING",
+    "SPIKING", "TRACING", "TRIANGULATING", "UNEARTHING", "UNPACKING", "WINNOWING",
+    "WRENCHING", "YANKING", "ZIPPERING", "BIFURCATING", "LACERATING", "DISLOCATING",
+    "INCINERATING", "STRANGULATING", "CORRODING", "VULNERATING", "OVERRIDING",
+    "PULVERIZING", "EVISCERATING", "GRINDING", "HAMMERING", "PIERCING", "RAMMING",
+    "SHATTERING", "SMASHING", "THRASHING", "UPROOTING", "CRUSHING", "DENTING",
+    "DRILLING", "FLAYING", "GOUGING", "HEWING", "JOLTING", "MAIMING", "QUASHING",
+    "RENDING", "SCARRING", "SLICING", "SPLINTERING", "SUNDERING", "TANKING",
+    "TEARING", "THUMPING", "TRASHING", "VAMPING", "WARPING", "WRACKING", "TRANSMUTING",
+    "DISSOLVING", "FORGING", "TEMPERING", "CRYSTALLIZING", "ANNEALING", "SMELTING",
+    "WELDING", "CAUTERIZING", "FUSING", "ATOMIZING", "VAPORIZING"
+]
 
 # Manual mode proxy + HTTP log (for HAR/PoC export)
 _MANUAL_PROXY_ENABLED = False
@@ -89,7 +108,7 @@ def export_har(entries: list = None) -> dict:
             'serverIPAddress': '',
             'connection': ''
         })
-    return {'log': {'version': '1.2', 'creator': {'name': 'PIN0CCHI0', 'version': '0.1'}, 'entries': har_entries}}
+    return {'log': {'version': '1.2', 'creator': {'name': 'PRAWN', 'version': '0.1'}, 'entries': har_entries}}
 
 def generate_curl_from_entry(entry: dict) -> str:
     req = entry.get('request', {})
@@ -263,6 +282,10 @@ def ensure_dir_exists(directory):
 def save_json_output(data, filename):
     """Alias for save_json."""
     return save_json(data, filename)
+
+def make_http_request(*args, **kwargs):
+    """Alias for make_request for compatibility with some modules."""
+    return make_request(*args, **kwargs)
 
 def normalize_url(url):
     """Normalize URL by ensuring it has a scheme and removing trailing slash."""

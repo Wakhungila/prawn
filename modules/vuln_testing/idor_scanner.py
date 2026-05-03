@@ -4,14 +4,14 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import re
 import json
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
 
 class IDORScanner(VulnerabilityTestingModule):
     """Insecure Direct Object References (IDOR) vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "idor_scanner"
         self.description = "Tests for Insecure Direct Object References (IDOR) vulnerabilities"

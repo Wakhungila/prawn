@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 """
-PIN0CCHI0 Module Manager
+PRAWN Module Manager
 
-This module handles the loading, management, and execution of PIN0CCHI0 modules.
+This module handles the loading, management, and execution of PRAWN modules.
 """
 
 import os
@@ -13,10 +13,10 @@ import inspect
 import importlib.util
 import logging
 
-logger = logging.getLogger('PIN0CCHI0.ModuleManager')
+logger = logging.getLogger('PRAWN.ModuleManager')
 
 class ModuleManager:
-    """Module manager for PIN0CCHI0."""
+    """Module manager for PRAWN."""
     
     def __init__(self, config_manager=None, modules_dir=None):
         """

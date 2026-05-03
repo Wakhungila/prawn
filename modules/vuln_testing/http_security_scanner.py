@@ -4,13 +4,13 @@ from typing import Dict, List, Optional, Tuple
 import requests
 import re
 from urllib.parse import urlparse
-from core.base_module import VulnerabilityTestingModule
+from core.base_module import VulnTestingModule
 from core.utils import make_http_request
 
 class HTTPSecurityScanner(VulnerabilityTestingModule):
     """HTTP Security Headers and Misconfiguration scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "http_security_scanner"
         self.description = "Tests for missing or misconfigured HTTP security headers"

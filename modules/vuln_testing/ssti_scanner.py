@@ -4,14 +4,14 @@ from typing import Dict, List, Optional, Set
 import requests
 import re
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, parse_qs
+from urllib.parse import urljoin, urlparse, parse_qs, urlencode
 from core.base_module import VulnerabilityTestingModule
 from core.utils import make_http_request, generate_random_string
 
 class SSTIScanner(VulnerabilityTestingModule):
     """Server-Side Template Injection (SSTI) vulnerability scanner module for PIN0CCHI0."""
 
-    def __init__(self, config: Dict):
+    def __init__(self):
         super().__init__(config)
         self.name = "ssti_scanner"
         self.description = "Tests for Server-Side Template Injection vulnerabilities"

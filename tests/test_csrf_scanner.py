@@ -11,17 +11,10 @@ from modules.vuln_testing.csrf_scanner import CSRFScanner
 class TestCSRFScanner(unittest.TestCase):
     
     def setUp(self):
-        # Create a mock configuration
-        self.config = {
-            'output_dir': './test_results',
-            'callbacks': {
-                'domain': 'example.com'
-            }
-        }
-        
         # Create the scanner with the mock configuration
-        self.scanner = CSRFScanner()
-        self.scanner.config = self.config
+        self.scanner = CSRFScanner() # No config needed in constructor now
+        self.scanner.config = {'output_dir': './test_results'} # Set config after init
+        self.scanner.target = "http://example.com" # Set a default target for tests
         
     @patch('modules.vuln_testing.csrf_scanner.make_request')
     def test_detect_missing_csrf_token(self, mock_make_request):

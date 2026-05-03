@@ -1,0 +1,124 @@
+{% extends "layout.html" %}
+{% set title = "System Health" %}
+
+{% block content %}
+<h2 class="mb-4">PRAWN System Health & Dependencies</h2>
+
+<div class="card mb-4 shadow-sm">
+    <div class="card-header bg-info text-white">
+        <i class="fas fa-tools me-2"></i> External Tool Status
+    </div>
+    <div class="card-body">
+        <div id="tool-status-container">
+            <div class="text-center text-muted py-4">Loading tool status...</div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-4">
+            <button id="refresh-tools-btn" class="btn btn-primary"><i class="fas fa-sync-alt me-2"></i> Refresh Status</button>
+            <button id="fix-tools-btn" class="btn btn-success" style="display: none;"><i class="fas fa-wrench me-2"></i> One-Click Fix Missing Tools</button>
+        </div>
+        <div id="fix-progress-container" class="mt-3" style="display: none;">
+            <div class="progress">
+                <div id="fix-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+            <p id="fix-status-message" class="text-muted mt-2"></p>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-secondary text-white">
+        <i class="fas fa-robot me-2"></i> Ollama AI Model Status
+    </div>
+    <div class="card-body">
+        <p><strong>Ollama Base URL:</strong> <code id="ollama-base-url">Loading...</code></p>
+        <p><strong>PRAWN Model:</strong> <code id="ollama-model-name">Loading...</code></p>
+        <p><strong>Model Status:</strong> <span id="ollama-model-status" class="badge bg-warning">Checking...</span></p>
+        <button id="pull-ollama-model-btn" class="btn btn-primary mt-3" style="display: none;"><i class="fas fa-download me-2"></i> Pull/Update PRAWN Model</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const toolStatusContainer = document.getElementById('tool-status-container');
+        const refreshToolsBtn = document.getElementById('refresh-tools-btn');
+        const fixToolsBtn = document.getElementById('fix-tools-btn');
+        const fixProgressContainer = document.getElementById('fix-progress-container');
+        const fixProgressBar = document.getElementById('fix-progress-bar');
+        const fixStatusMessage = document.getElementById('fix-status-message');
+
+        const ollamaBaseUrl = document.getElementById('ollama-base-url');
+        const ollamaModelName = document.getElementById('ollama-model-name');
+        const ollamaModelStatus = document.getElementById('ollama-model-status');
+        const pullOllamaModelBtn = document.getElementById('pull-ollama-model-btn');
+
+        async function fetchToolStatus() {
+            toolStatusContainer.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i> Fetching tool status...</div>';
+            const response = await fetch('/api/system_health');
+            const data = await response.json();
+
+            if (data.success) {
+                renderToolStatus(data.report);
+                if (data.report.summary.missing > 0) {
+                    fixToolsBtn.style.display = 'inline-block';
+                } else {
+                    fixToolsBtn.style.display = 'none';
+                }
+            } else {
+                toolStatusContainer.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+            }
+        }
+
+        function renderToolStatus(report) {
+            let html = `<p>Summary: ${report.summary.present} present, ${report.summary.missing} missing</p>`;
+            html += `<table class="table table-sm table-hover"><thead><tr><th>Tool</th><th>Status</th><th>Version</th><th>URL</th></tr></thead><tbody>`;
+            report.tools.forEach(tool => {
+                const statusClass = tool.present ? 'text-success' : 'text-danger';
+                const statusIcon = tool.present ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+                html += `<tr>
+                            <td>${tool.name}</td>
+                            <td><span class="${statusClass}">${statusIcon} ${tool.present ? 'OK' : 'MISSING'}</span></td>
+                            <td>${tool.version || 'N/A'}</td>
+                            <td><a href="${tool.url}" target="_blank">${tool.url ? 'Link' : ''}</a></td>
+                        </tr>`;
+            });
+            html += `</tbody></table>`;
+            toolStatusContainer.innerHTML = html;
+        }
+
+        refreshToolsBtn.addEventListener('click', fetchToolStatus);
+        fixToolsBtn.addEventListener('click', async function() {
+            fixToolsBtn.disabled = true;
+            fixProgressContainer.style.display = 'block';
+            fixStatusMessage.textContent = 'Running setup script... This may take a few minutes.';
+            fixProgressBar.style.width = '50%';
+
+            const response = await fetch('/api/system_fix', { method: 'POST' });
+            const data = await response.json();
+
+            fixProgressBar.style.width = '100%';
+            if (data.success) {
+                fixStatusMessage.textContent = 'Setup script completed successfully! Refreshing status...';
+                showToast('Tools installed/updated successfully!', 'success');
+            } else {
+                fixStatusMessage.textContent = `Setup script failed: ${data.error}`;
+                showToast(`Tool setup failed: ${data.error}`, 'danger');
+            }
+            fixToolsBtn.disabled = false;
+            fixProgressContainer.style.display = 'none';
+            fetchToolStatus(); // Refresh status after fix attempt
+        });
+
+        // Initial fetch
+        fetchToolStatus();
+
+        // Placeholder for Ollama status (requires a dedicated API endpoint in app.py)
+        ollamaBaseUrl.textContent = "{{ OLLAMA_BASE_URL }}";
+        ollamaModelName.textContent = "{{ OLLAMA_MODEL }}";
+        // You'd need an API endpoint like /api/ollama_status to check if the model is loaded
+        // For now, assume it's checking.
+        // pullOllamaModelBtn.addEventListener('click', async function() { /* ... */ });
+    });
+</script>
+{% endblock %}
